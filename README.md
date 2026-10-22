@@ -14,6 +14,10 @@ npm run example
 
 `npm run build` emits JavaScript, declarations, and source maps into `dist/`.
 `npm run typecheck` runs strict TypeScript checking without emitting files.
+`npm run lint` checks the source and tests with ESLint. `npm run format` formats
+the project with Prettier, and `npm run format:check` checks formatting without
+writing changes. EditorConfig and Prettier use four spaces for indentation and a
+120-character line width.
 
 ## Usage
 
@@ -37,19 +41,16 @@ const schema = Schema.fromJson(`{
   "functions": ["contains"]
 }`);
 
-const ast = parseWithSchema(
-  'user.age >= 18 AND user.status == "active" AND contains(user.tags, "trusted")',
-  schema,
-);
+const ast = parseWithSchema('user.age >= 18 AND user.status == "active" AND contains(user.tags, "trusted")', schema);
 
 // Syntax-only parsing and separate validation are also supported.
 schema.validateFilter(parse("user.age >= 18"));
 
 try {
-  parseWithSchema('user.age >= "eighteen"', schema);
+    parseWithSchema('user.age >= "eighteen"', schema);
 } catch (error) {
-  if (!(error instanceof ValidationError)) throw error;
-  console.error(error.detail, error.span);
+    if (!(error instanceof ValidationError)) throw error;
+    console.error(error.detail, error.span);
 }
 ```
 

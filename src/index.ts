@@ -15,12 +15,12 @@ export type { Constant, FieldType, PrimitiveType } from "./type-system.js";
 
 /** Parse syntax only, without requiring a schema. */
 export function parse(source: string): Expr {
-  return new Parser(new Lexer(source).tokenize()).parse();
+    return new Parser(new Lexer(source).tokenize()).parse();
 }
 
 /** Parse and statically validate a boolean filter against a reusable schema. */
 export function parseWithSchema(source: string, schema: Schema): Expr {
-  const expr = parse(source);
-  schema.validateFilter(expr);
-  return expr;
+    const expr = parse(source);
+    schema.validateFilter(expr);
+    return expr;
 }
