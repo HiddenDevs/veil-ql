@@ -1,6 +1,6 @@
-# Veil QL
+# Veil-QL
 
-Veil QL (`veil-ql`) is a zero-runtime-dependency TypeScript library for parsing
+Veil-QL (`veil-ql`) is a zero-runtime-dependency TypeScript library for parsing
 and statically validating filter expressions. Turn a query string into a typed
 abstract syntax tree (AST), and check it against the fields, types, values, and
 operators your application allows.
@@ -12,7 +12,7 @@ configuration:
 user.age >= 18 AND user.status IN ["active", "pending"]
 ```
 
-Veil QL handles tokenization, parsing, and semantic validation. It does **not**
+Veil-QL handles tokenization, parsing, and semantic validation. It does **not**
 execute queries, generate SQL, or validate application records. Your application
 is responsible for interpreting or translating the resulting AST.
 
@@ -30,7 +30,7 @@ is responsible for interpreting or translating the resulting AST.
 
 ## Getting started
 
-Requires Node.js 22+ and npm. Install Veil QL from npm:
+Requires Node.js 22+ and npm. Install Veil-QL from npm:
 
 ```sh
 npm install @hiddendevs/veil-ql
@@ -156,7 +156,7 @@ declared list element types. Optional arguments, overloads, and generic custom
 signatures are not supported.
 
 Function names must be single, case-sensitive ASCII identifiers, not reserved
-words or dotted paths. Veil QL validates calls only; your application must
+words or dotted paths. Veil-QL validates calls only; your application must
 implement their execution or translation.
 
 ## AI agent instructions
@@ -184,7 +184,7 @@ in a tool definition, or pass it to a template:
 const description = schema.describe();
 
 const systemPrompt = [
-    "Write a Veil QL query for the user's request.",
+    "Write a Veil-QL query for the user's request.",
     description.language.summary,
     ...description.language.rules,
     "Schema:",
