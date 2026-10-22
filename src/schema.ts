@@ -105,7 +105,7 @@ function definition(value: unknown, path: string): FieldDefinition {
 export class Schema {
     private constructor(private readonly validator: Validator) {}
 
-    static fromJson(source: string, options: SchemaOptions = {}): Schema {
+    public static fromJson(source: string, options: SchemaOptions = {}): Schema {
         let raw: unknown;
         try {
             raw = JSON.parse(source);
@@ -116,7 +116,7 @@ export class Schema {
         return Schema.fromObject(raw, options);
     }
 
-    static fromObject(value: unknown, options: SchemaOptions = {}): Schema {
+    public static fromObject(value: unknown, options: SchemaOptions = {}): Schema {
         const config = object(value, "schema");
         keys(config, ["fields", "functions"], "schema");
         const fields = new Map<string, FieldDefinition>();
@@ -154,7 +154,7 @@ export class Schema {
         return new Schema(new Validator(fields, enabled));
     }
 
-    validateFilter(expr: Expr): void {
+    public validateFilter(expr: Expr): void {
         this.validator.validateFilter(expr);
     }
 }

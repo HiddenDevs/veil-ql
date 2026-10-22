@@ -11,7 +11,7 @@ export function isComparisonOp(value: string): value is ComparisonOp {
 export class Parser {
     private current = 0;
 
-    constructor(private readonly tokens: readonly Token[]) {
+    public constructor(private readonly tokens: readonly Token[]) {
         if (
             tokens.length === 0 ||
             tokens.at(-1)?.kind !== "eof" ||
@@ -47,7 +47,7 @@ export class Parser {
         return new ParseError({ kind: "UnexpectedToken", found: token.kind, expected }, token.span);
     }
 
-    parse(): Expr {
+    public parse(): Expr {
         if (this.peek().kind === "eof") {
             throw new ParseError({ kind: "EmptyExpression" }, this.peek().span);
         }

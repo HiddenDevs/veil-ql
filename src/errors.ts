@@ -25,7 +25,7 @@ export type ValidationErrorDetail =
     | { readonly kind: "ValueNotAllowed"; readonly field: string };
 
 export class LexError extends Error {
-    constructor(
+    public constructor(
         readonly detail: LexErrorDetail,
         readonly span: Span,
     ) {
@@ -35,7 +35,7 @@ export class LexError extends Error {
 }
 
 export class ParseError extends Error {
-    constructor(
+    public constructor(
         readonly detail: ParseErrorDetail,
         readonly span: Span,
     ) {
@@ -45,7 +45,7 @@ export class ParseError extends Error {
 }
 
 export class ValidationError extends Error {
-    constructor(
+    public constructor(
         readonly detail: ValidationErrorDetail,
         readonly span: Span,
     ) {
@@ -55,7 +55,7 @@ export class ValidationError extends Error {
 }
 
 export class SchemaError extends Error {
-    constructor(message: string, options?: ErrorOptions) {
+    public constructor(message: string, options?: ErrorOptions) {
         super(`invalid schema: ${message}`, options);
         this.name = "SchemaError";
     }

@@ -45,12 +45,12 @@ function constant(expr: Expr): Constant | undefined {
 
 /** Internal semantic pass; syntax parsing remains schema independent. */
 export class Validator {
-    constructor(
+    public constructor(
         private readonly fields: ReadonlyMap<string, FieldDefinition>,
         private readonly functions: ReadonlyMap<string, FunctionSignature | "contains">,
     ) {}
 
-    validateFilter(expr: Expr): void {
+    public validateFilter(expr: Expr): void {
         const actual = this.infer(expr);
         if (actual !== "boolean") mismatch(expr, "boolean", actual);
     }

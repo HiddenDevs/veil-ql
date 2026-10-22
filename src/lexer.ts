@@ -12,7 +12,7 @@ export class Lexer {
     private position = 0;
     private bytePosition = 0;
 
-    constructor(private readonly source: string) {}
+    public constructor(private readonly source: string) {}
 
     private peek(): string {
         const code = this.source.codePointAt(this.position);
@@ -33,7 +33,7 @@ export class Lexer {
         return { start, end: this.bytePosition };
     }
 
-    nextToken(): Token {
+    public nextToken(): Token {
         while (whitespace(this.peek())) this.advance();
         const start = this.bytePosition;
         const sourceStart = this.position;
@@ -143,7 +143,7 @@ export class Lexer {
         }
     }
 
-    tokenize(): Token[] {
+    public tokenize(): Token[] {
         const tokens: Token[] = [];
         while (true) {
             const token = this.nextToken();
