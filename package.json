@@ -1,8 +1,29 @@
 {
-    "name": "bql",
-    "version": "0.1.0",
-    "private": true,
+    "name": "@hiddendevs/veil-ql",
+    "version": "1.0.0",
+    "description": "Parse and statically validate typed filter expressions.",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/HiddenDevs/veil-ql.git"
+    },
+    "homepage": "https://github.com/HiddenDevs/veil-ql#readme",
+    "bugs": {
+        "url": "https://github.com/HiddenDevs/veil-ql/issues"
+    },
+    "keywords": [
+        "query",
+        "filter",
+        "parser",
+        "validation"
+    ],
+    "files": [
+        "dist/src",
+        "README.md"
+    ],
     "type": "module",
+    "publishConfig": {
+        "access": "public"
+    },
     "exports": {
         ".": {
             "types": "./dist/src/index.d.ts",
@@ -11,6 +32,7 @@
     },
     "scripts": {
         "build": "tsc -p tsconfig.json",
+        "prepublishOnly": "npm run build",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "test": "vitest run",
         "lint": "eslint .",

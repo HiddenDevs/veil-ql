@@ -30,22 +30,16 @@ is responsible for interpreting or translating the resulting AST.
 
 ## Getting started
 
-Requires Node.js 22+ and npm. From the repository root:
+Requires Node.js 22+ and npm. Install Veil QL from npm:
 
 ```sh
-npm install
-npm run build
-npm test
+npm install @hiddendevs/veil-ql
 ```
-
-The package metadata currently uses the name `bql` and marks the package private.
-Until publishing is configured, the examples below use the local build rather
-than assuming `veil-ql` is available from a registry.
 
 ## Parse and validate a query
 
 ```ts
-import { Schema, parse } from "./dist/src/index.js";
+import { Schema, parse } from "@hiddendevs/veil-ql";
 
 const schema = Schema.fromObject({
     description: "Registered users.",
@@ -125,7 +119,7 @@ The `functions` map is the complete set of functions a query may call. Enable a
 built-in function with `true`, or declare a custom function with its signature:
 
 ```ts
-import { Schema, type FunctionConfig } from "./dist/src/index.js";
+import { Schema, type FunctionConfig } from "@hiddendevs/veil-ql";
 
 // Plain objects can be shared between schemas.
 const stringFunctions = {
@@ -263,7 +257,7 @@ discriminated `detail` object, a `span`, and a readable `message`. `SchemaError`
 reports invalid configuration and is never caused by a query string.
 
 ```ts
-import { QueryError } from "./dist/src/index.js";
+import { QueryError } from "@hiddendevs/veil-ql";
 
 try {
     schema.parse('user.age >= "eighteen"');
