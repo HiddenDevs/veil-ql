@@ -1,4 +1,4 @@
-import type { BinaryOp, ComparisonOp, Expr } from "./ast.js";
+import type { BinaryOp, ComparisonOp, Expr, Query, SortDirection, SortField } from "./ast.js";
 import { ParseError } from "./errors.js";
 import { joinSpans } from "./token.js";
 import type { Token, TokenKind } from "./token.js";
@@ -48,12 +48,55 @@ export class Parser {
     }
 
     public parse(): Expr {
+        const expr = this.filter();
+        this.expect("eof");
+        return expr;
+    }
+
+    public parseQuery(): Query {
+        const filter = this.filter();
+        const sorts = this.sorts();
+        this.expect("eof");
+        const lastSort = sorts.at(-1);
+        return {
+            filter,
+            sorts,
+            span: lastSort === undefined ? filter.span : joinSpans(filter.span, lastSort.span),
+        };
+    }
+
+    private filter(): Expr {
         if (this.peek().kind === "eof") {
             throw new ParseError({ kind: "EmptyExpression" }, this.peek().span);
         }
-        const expr = this.or();
-        this.expect("eof");
-        return expr;
+        return this.or();
+    }
+
+    private sorts(): SortField[] {
+        if (this.match("SORT") === undefined) return [];
+        this.expect("BY");
+        const sorts: SortField[] = [];
+        do {
+            const first = this.expect("identifier");
+            if (first.kind !== "identifier") throw this.unexpected(first, ["identifier"]);
+            const parts = [first.value];
+            let fieldSpan = first.span;
+            while (this.match(".") !== undefined) {
+                const part = this.expect("identifier");
+                if (part.kind !== "identifier") throw this.unexpected(part, ["identifier"]);
+                parts.push(part.value);
+                fieldSpan = joinSpans(fieldSpan, part.span);
+            }
+            const field = { kind: "path", parts, span: fieldSpan } as const;
+            const directionToken = this.match("ASC") ?? this.match("DESC");
+            const direction: SortDirection = directionToken?.kind === "DESC" ? "DESC" : "ASC";
+            sorts.push({
+                field,
+                direction,
+                span: directionToken === undefined ? fieldSpan : joinSpans(fieldSpan, directionToken.span),
+            });
+        } while (this.match(",") !== undefined);
+        return sorts;
     }
 
     private binary(left: Expr, op: BinaryOp, right: Expr): Expr {

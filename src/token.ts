@@ -11,7 +11,7 @@ export function joinSpans(left: Span, right: Span): Span {
     };
 }
 
-export type Keyword = "TRUE" | "FALSE" | "NULL" | "AND" | "OR" | "NOT" | "IN";
+export type Keyword = "TRUE" | "FALSE" | "NULL" | "AND" | "OR" | "NOT" | "IN" | "SORT" | "BY" | "ASC" | "DESC";
 export type Symbol = "==" | "!=" | ">" | ">=" | "<" | "<=" | "+" | "-" | "(" | ")" | "[" | "]" | "," | ".";
 
 export type Token = (
@@ -24,5 +24,5 @@ export type Token = (
 export type TokenKind = Token["kind"];
 
 export function isKeyword(word: string): word is Keyword {
-    return ["TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN"].includes(word);
+    return ["TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN", "SORT", "BY", "ASC", "DESC"].includes(word);
 }

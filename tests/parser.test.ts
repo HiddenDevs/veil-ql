@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { LexError, Lexer, ParseError, Parser, parse } from "../src/index.js";
+import { LexError, Lexer, ParseError, Parser, parse, parseQuery, parseQueryWithSchema, Schema } from "../src/index.js";
 import type { ComparisonOp, ParseErrorDetail } from "../src/index.js";
 
 test("preserves logical and comparison precedence", () => {
@@ -56,6 +56,34 @@ test("logical operators associate to the left", () => {
     if (expr.kind === "binary") assert.equal(expr.left.kind, "binary");
 });
 
+test("parses optional single and multiple SORT BY fields", () => {
+    const query = parseQuery('status == "paid" SORT BY customer.createdAt DESC, total');
+    assert.equal(query.filter.kind, "binary");
+    assert.equal(query.sorts.length, 2);
+    assert.deepEqual(query.sorts[0], {
+        field: {
+            kind: "path",
+            parts: ["customer", "createdAt"],
+            span: { start: 25, end: 43 },
+        },
+        direction: "DESC",
+        span: { start: 25, end: 48 },
+    });
+    assert.deepEqual(query.sorts[1], {
+        field: { kind: "path", parts: ["total"], span: { start: 50, end: 55 } },
+        direction: "ASC",
+        span: { start: 50, end: 55 },
+    });
+    assert.deepEqual(query.span, { start: 0, end: 55 });
+});
+
+test("parses queries without sorting and validates their filter", () => {
+    assert.deepEqual(parseQuery("age >= 18").sorts, []);
+    const schema = Schema.fromObject({ fields: { age: { type: "number" } } });
+    const query = parseQueryWithSchema("age >= 18 SORT BY age DESC", schema);
+    assert.equal(query.sorts[0]?.direction, "DESC");
+});
+
 for (const op of ["==", "!=", ">", ">=", "<", "<=", "IN", "NOT IN"] satisfies ComparisonOp[]) {
     test(`parses comparison operator ${op}`, () => {
         const expr = parse(`a ${op} b`);
@@ -80,6 +108,11 @@ const failures: readonly [string, ParseErrorDetail["kind"]][] = [
     ["age 18", "UnexpectedToken"],
     ["+1", "UnexpectedToken"],
     ["()", "UnexpectedToken"],
+    ['status == "paid" SORT BY', "UnexpectedToken"],
+    ['status == "paid" SORT total', "UnexpectedToken"],
+    ['status == "paid" SORT BY total,', "UnexpectedToken"],
+    ['status == "paid" SORT BY total == 1', "UnexpectedToken"],
+    ["SORT BY total", "UnexpectedToken"],
 ];
 
 for (const [source, kind] of failures) {

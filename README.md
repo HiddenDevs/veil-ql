@@ -43,7 +43,7 @@ than assuming `veil-ql` is available from a registry.
 ## Parse and validate a filter
 
 ```ts
-import { Schema, parse, parseWithSchema } from "./dist/src/index.js";
+import { Schema, parse, parseQuery, parseQueryWithSchema, parseWithSchema } from "./dist/src/index.js";
 
 const schema = Schema.fromJson(`{
   "fields": {
@@ -68,6 +68,12 @@ console.log(ast.kind); // "binary"
 
 // Parse without a schema, then validate the AST separately.
 schema.validateFilter(parse("user.age >= 18"));
+
+const query = parseQueryWithSchema(
+    'user.status IN ["active", "pending"] SORT BY user.age DESC, user.status ASC',
+    schema,
+);
+console.log(query.filter.kind, query.sorts);
 ```
 
 `parse(source)` checks syntax and returns an `Expr`; it does not check whether
@@ -197,6 +203,23 @@ contains(user.tags, "trusted")
   members of literal membership lists. They do not prove runtime values in
   field-to-field comparisons or functions. List-field enums describe whole
   lists, not their elements; nullable enums must include null explicitly.
+
+## Sorting
+
+`parseQuery(source)` parses a boolean filter followed by an optional `SORT BY`
+clause and returns a `Query` with a `filter` expression and ordered `sorts`
+entries. Each entry contains a dotted field path and a direction. The direction
+defaults to `ASC`; multiple sort fields are comma-separated:
+
+```ts
+const query = parseQuery('user.status == "active" SORT BY user.age DESC, user.name');
+```
+
+`parseQueryWithSchema(source, schema)` validates the filter expression as well.
+Sort paths are parsed as field paths but are not checked against the schema by
+this helper; applications should allowlist sort paths before translating them
+to database columns. The existing `parse` and `parseWithSchema` functions
+continue to accept filter expressions only.
 
 Validation is static. Nullable values do not acquire flow-sensitive narrowing
 from preceding conditions: a null check does not make a subsequent nullable

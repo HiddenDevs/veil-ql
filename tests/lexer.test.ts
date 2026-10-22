@@ -18,8 +18,26 @@ test("lexes a basic filter with typed tokens and byte spans", () => {
 
 test("matches whole keywords case-insensitively", () => {
     assert.deepEqual(
-        new Lexer("AND ANDrew true TRUE null nOt iN or false _user2").tokenize().map((token) => token.kind),
-        ["AND", "identifier", "TRUE", "TRUE", "NULL", "NOT", "IN", "OR", "FALSE", "identifier", "eof"],
+        new Lexer("AND ANDrew true TRUE null nOt iN or false sort by asc desc _user2")
+            .tokenize()
+            .map((token) => token.kind),
+        [
+            "AND",
+            "identifier",
+            "TRUE",
+            "TRUE",
+            "NULL",
+            "NOT",
+            "IN",
+            "OR",
+            "FALSE",
+            "SORT",
+            "BY",
+            "ASC",
+            "DESC",
+            "identifier",
+            "eof",
+        ],
     );
 });
 

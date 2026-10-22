@@ -13,3 +13,17 @@ export type Expr = (
     | { readonly kind: "unary"; readonly op: UnaryOp; readonly expr: Expr }
     | { readonly kind: "binary"; readonly left: Expr; readonly op: BinaryOp; readonly right: Expr }
 ) & { readonly span: Span };
+
+export type SortDirection = "ASC" | "DESC";
+
+export interface SortField {
+    readonly field: Extract<Expr, { kind: "path" }>;
+    readonly direction: SortDirection;
+    readonly span: Span;
+}
+
+export interface Query {
+    readonly filter: Expr;
+    readonly sorts: readonly SortField[];
+    readonly span: Span;
+}
