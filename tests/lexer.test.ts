@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { LexError, Lexer } from "../src/index.js";
 import type { LexErrorDetail } from "../src/index.js";
 

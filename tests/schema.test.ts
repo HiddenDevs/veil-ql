@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { Schema, SchemaError, ValidationError, parse, parseWithSchema } from "../src/index.js";
 import type { Expr, SchemaConfig, ValidationErrorDetail } from "../src/index.js";
 
