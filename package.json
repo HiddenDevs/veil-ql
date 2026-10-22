@@ -1,6 +1,6 @@
 {
     "name": "@hiddendevs/veil-ql",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Parse and statically validate typed filter expressions.",
     "repository": {
         "type": "git",
