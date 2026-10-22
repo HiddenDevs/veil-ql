@@ -1,8 +1,14 @@
 import type { BinaryOp, ComparisonOp, Expr } from "./ast.js";
 import { ValidationError } from "./errors.js";
-import type { FieldDefinition } from "./schema.js";
+import type { FieldDefinition, FunctionSignature } from "./schema.js";
 import { compatible, mergeTypes, sameConstant, typeName } from "./type-system.js";
-import type { Constant, ValueType } from "./type-system.js";
+import type { Constant, FieldType, ValueType } from "./type-system.js";
+
+function matchesParameter(expected: FieldType, actual: ValueType): boolean {
+    if (actual === "unknown") return true;
+    if (typeof expected === "string") return expected === actual;
+    return typeof actual === "object" && "list" in actual && matchesParameter(expected.list, actual.list);
+}
 
 function mismatch(expr: Expr, expected: ValueType, actual: ValueType): never {
     throw new ValidationError(
@@ -41,7 +47,7 @@ function constant(expr: Expr): Constant | undefined {
 export class Validator {
     constructor(
         private readonly fields: ReadonlyMap<string, FieldDefinition>,
-        private readonly containsEnabled: boolean,
+        private readonly functions: ReadonlyMap<string, FunctionSignature | "contains">,
     ) {}
 
     validateFilter(expr: Expr): void {
@@ -121,20 +127,29 @@ export class Validator {
     }
 
     private call(expr: Extract<Expr, { kind: "call" }>): ValueType {
-        if (expr.name !== "contains" || !this.containsEnabled) {
+        const signature = this.functions.get(expr.name);
+        if (signature === undefined) {
             throw new ValidationError({ kind: "UnknownFunction", function: expr.name }, expr.span);
         }
-        const [containerExpr, needleExpr] = expr.args;
-        if (expr.args.length !== 2 || containerExpr === undefined || needleExpr === undefined) {
+        const expected = signature === "contains" ? 2 : signature.parameters.length;
+        if (expr.args.length !== expected) {
             throw new ValidationError(
-                {
-                    kind: "InvalidArgumentCount",
-                    function: expr.name,
-                    expected: 2,
-                    actual: expr.args.length,
-                },
+                { kind: "InvalidArgumentCount", function: expr.name, expected, actual: expr.args.length },
                 expr.span,
             );
+        }
+        if (signature !== "contains") {
+            for (const [index, argument] of expr.args.entries()) {
+                const parameter = signature.parameters[index];
+                if (parameter === undefined) throw new TypeError("Missing function parameter definition");
+                const actual = this.infer(argument);
+                if (!matchesParameter(parameter, actual)) mismatch(argument, parameter, actual);
+            }
+            return signature.returns;
+        }
+        const [containerExpr, needleExpr] = expr.args;
+        if (containerExpr === undefined || needleExpr === undefined) {
+            throw new TypeError("Missing contains arguments in AST");
         }
         const container = this.infer(containerExpr);
         const needle = this.infer(needleExpr);

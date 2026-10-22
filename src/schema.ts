@@ -15,7 +15,16 @@ export interface FieldConfig {
 
 export interface SchemaConfig {
     readonly fields: Readonly<Record<string, FieldConfig>>;
-    readonly functions?: readonly "contains"[];
+    readonly functions?: readonly string[];
+}
+
+export interface FunctionSignature {
+    readonly parameters: readonly FieldType[];
+    readonly returns: FieldType;
+}
+
+export interface SchemaOptions {
+    readonly functions?: Readonly<Record<string, FunctionSignature>>;
 }
 
 export interface FieldDefinition {
@@ -72,7 +81,7 @@ function definition(value: unknown, path: string): FieldDefinition {
             if (!constantMatches(value, type)) {
                 throw new SchemaError(`values for '${path}' must match ${typeName(type)}`);
             }
-            return value;
+            return structuredClone(value);
         });
     }
     let operators: ComparisonOp[] | undefined;
@@ -96,7 +105,7 @@ function definition(value: unknown, path: string): FieldDefinition {
 export class Schema {
     private constructor(private readonly validator: Validator) {}
 
-    static fromJson(source: string): Schema {
+    static fromJson(source: string, options: SchemaOptions = {}): Schema {
         let raw: unknown;
         try {
             raw = JSON.parse(source);
@@ -104,22 +113,45 @@ export class Schema {
             if (!(cause instanceof SyntaxError)) throw cause;
             throw new SchemaError("malformed JSON", { cause });
         }
-        const config = object(raw, "schema");
+        return Schema.fromObject(raw, options);
+    }
+
+    static fromObject(value: unknown, options: SchemaOptions = {}): Schema {
+        const config = object(value, "schema");
         keys(config, ["fields", "functions"], "schema");
         const fields = new Map<string, FieldDefinition>();
         for (const [path, value] of Object.entries(object(config["fields"], "fields"))) {
             if (!fieldPath(path)) throw new SchemaError(`invalid field path '${path}'`);
             fields.set(path, definition(value, path));
         }
-        const functions = config["functions"] ?? ["contains"];
-        if (
-            config["functions"] === null ||
-            !Array.isArray(functions) ||
-            !functions.every((name: unknown) => name === "contains")
-        ) {
-            throw new SchemaError("functions must be an array of implemented names: 'contains'");
+        const registry = new Map<string, FunctionSignature | "contains">([["contains", "contains"]]);
+        const settings = object(options, "schema options");
+        keys(settings, ["functions"], "schema options");
+        const customFunctions = settings["functions"] === undefined ? {} : object(settings["functions"], "functions");
+        for (const [name, value] of Object.entries(customFunctions)) {
+            if (name.includes(".") || !fieldPath(name)) throw new SchemaError(`invalid function name '${name}'`);
+            if (registry.has(name)) throw new SchemaError(`cannot override built-in function '${name}'`);
+            const signature = object(value, `function '${name}'`);
+            keys(signature, ["parameters", "returns"], `function '${name}'`);
+            const parameters = signature["parameters"];
+            if (!Array.isArray(parameters)) throw new SchemaError(`parameters for '${name}' must be an array`);
+            registry.set(name, {
+                parameters: Array.from(parameters, (type: unknown, index) =>
+                    fieldType(type, `${name}.parameters[${index}]`),
+                ),
+                returns: fieldType(signature["returns"], `${name}.returns`),
+            });
         }
-        return new Schema(new Validator(fields, functions.includes("contains")));
+        const functions = config["functions"] === undefined ? ["contains"] : config["functions"];
+        if (!Array.isArray(functions)) throw new SchemaError("functions must be an array of registered names");
+        const enabled = new Map<string, FunctionSignature | "contains">();
+        for (const name of functions) {
+            if (typeof name !== "string") throw new SchemaError("functions must be an array of registered names");
+            const signature = registry.get(name);
+            if (signature === undefined) throw new SchemaError(`unknown function '${name}' in schema`);
+            enabled.set(name, signature);
+        }
+        return new Schema(new Validator(fields, enabled));
     }
 
     validateFilter(expr: Expr): void {

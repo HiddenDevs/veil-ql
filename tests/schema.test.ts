@@ -23,6 +23,41 @@ const config = {
 } satisfies SchemaConfig;
 const schema = Schema.fromJson(JSON.stringify(config));
 
+test("constructs a schema from typed configuration or an already parsed object", () => {
+    const parsed: unknown = JSON.parse(JSON.stringify(config));
+    for (const input of [config, parsed]) {
+        const schema = Schema.fromObject(input);
+        assert.doesNotThrow(() => parseWithSchema('user.age >= 18 AND contains(user.tags, "trusted")', schema));
+        assert.throws(() => parseWithSchema('user.age >= "eighteen"', schema), ValidationError);
+        assert.throws(() => parseWithSchema("missing == 1", schema), ValidationError);
+        assert.throws(() => parseWithSchema('user.status == "deleted"', schema), ValidationError);
+    }
+});
+
+test("does not retain mutable references to object configuration", () => {
+    const config = {
+        fields: {
+            numbers: { type: { list: "number" }, values: [[1, 2]], operators: ["=="] },
+        },
+        functions: ["contains"],
+    };
+    const schema = Schema.fromObject(config);
+    config.fields.numbers.type.list = "string";
+    config.fields.numbers.values[0]?.push(3);
+    config.fields.numbers.operators.length = 0;
+    config.functions.length = 0;
+
+    assert.doesNotThrow(() => parseWithSchema("numbers == [1, 2]", schema));
+    assert.throws(() => parseWithSchema("numbers == [1, 2, 3]", schema), ValidationError);
+    assert.doesNotThrow(() => parseWithSchema("contains(numbers, 1)", schema));
+});
+
+test("rejects non-JSON values in object configuration", () => {
+    for (const value of [undefined, "{}", 1, true, { fields: { x: { type: "number", values: [NaN] } } }]) {
+        assert.throws(() => Schema.fromObject(value), SchemaError);
+    }
+});
+
 for (const query of [
     "user.age >= 18 AND user.active",
     "NOT user.active OR -user.age < 0",
@@ -145,6 +180,8 @@ for (const raw of [
 ]) {
     test(`rejects invalid schema ${raw}`, () => {
         assert.throws(() => Schema.fromJson(raw), SchemaError);
+        const parsed: unknown = JSON.parse(raw);
+        assert.throws(() => Schema.fromObject(parsed), SchemaError);
     });
 }
 

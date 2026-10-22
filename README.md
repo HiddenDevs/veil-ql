@@ -22,6 +22,7 @@ is responsible for interpreting or translating the resulting AST.
 - Dotted field paths, comparisons, logical operators, lists, and `contains`.
 - JSON-based schema configuration with field types, nullability, allowed values,
   operator restrictions, and a function allowlist.
+- Custom function signatures with argument and return-type validation.
 - Readonly, discriminated AST types and structured errors with source spans.
 - ESM output, TypeScript declarations, and source maps.
 
@@ -85,16 +86,85 @@ runtime records. Dotted paths such as `user.age` are explicitly declared fields.
 | `nullable`  | Allow null for a field. Defaults to `false`.                                                                          |
 | `values`    | Restrict literal comparisons to a nonempty set of allowed values. Omitted or `null` means unrestricted.               |
 | `operators` | Allow specific direct comparison operators. Omitted or `null` allows type-compatible comparisons; `[]` disables them. |
-| `functions` | Allow implemented functions. Defaults to `["contains"]`; `[]` disables function calls.                                |
+| `functions` | Allow built-in or registered functions. Defaults to `["contains"]`; `[]` disables function calls.                     |
 
 For a configuration file, use `Schema.fromJson(await readFile(path, "utf8"))`
 with `readFile` from `node:fs/promises`. Reuse the resulting schema for queries.
-`SchemaConfig` and `FieldConfig` types are exported for authoring configuration
-objects with `satisfies`; JSON is still checked at runtime, not cast to trusted
-types.
+
+If you already have an object, use `Schema.fromObject(value)` without serializing
+it first. It accepts `unknown` and performs the same runtime checks as `fromJson`.
+Both factories keep the schema independent of later changes to the input.
+`SchemaConfig` and `FieldConfig` types are also exported for authoring
+configuration objects with `satisfies`:
+
+```ts
+import { Schema, type SchemaConfig } from "./dist/src/index.js";
+
+const config = {
+    fields: {
+        "user.age": { type: "number" },
+        "user.active": { type: "boolean" },
+    },
+} satisfies SchemaConfig;
+
+const schema = Schema.fromObject(config);
+```
 
 Unknown configuration properties, invalid field paths, mismatched allowed values,
 and invalid operator/type combinations are rejected with `SchemaError`.
+
+## Custom functions
+
+Register custom function signatures in the second argument to either
+`Schema.fromObject(config, options)` or `Schema.fromJson(json, options)`, and
+enable their names in the schema's `functions` allowlist:
+
+```ts
+import { Schema, parseWithSchema, type SchemaOptions } from "./dist/src/index.js";
+
+const options = {
+    functions: {
+        startsWith: {
+            parameters: ["string", "string"],
+            returns: "boolean",
+        },
+        length: {
+            parameters: ["string"],
+            returns: "number",
+        },
+    },
+} satisfies SchemaOptions;
+
+const schema = Schema.fromObject(
+    {
+        fields: { "user.name": { type: "string" } },
+        functions: ["contains", "startsWith", "length"],
+    },
+    options,
+);
+
+parseWithSchema('startsWith(user.name, "admin") AND length(user.name) >= 5', schema);
+```
+
+`FunctionSignature` describes a fixed-length `parameters` array and a `returns`
+type. Both use `FieldType`: `"number"`, `"string"`, `"boolean"`, or recursively
+`{ list: TYPE }`. Zero-argument functions use `parameters: []`. Calls may be
+nested, and return types are checked in the surrounding expression. Arguments
+must match the declared non-nullable types; nullable fields and null literals
+are rejected. Empty lists are compatible with declared list element types.
+Optional arguments, overloads, and generic custom signatures are not supported.
+
+Registration does not automatically enable a function. Omitting the schema's
+`functions` still enables only `contains`, and `[]` disables all calls.
+Unknown allowlist entries and invalid registrations throw `SchemaError`.
+Names must be single, case-sensitive ASCII identifiers, not reserved words or
+dotted paths. Built-in names cannot be overridden.
+
+The built-in `contains` keeps its string and generic list signatures.
+Custom signatures are copied when a schema is constructed, so later registry
+mutations do not affect it. Registries can be shared across schemas with
+different allowlists. Veil QL validates calls only; your application must
+implement their execution or translation.
 
 ## Filter language
 
@@ -160,15 +230,15 @@ double-precision floating-point semantics.
 
 ## Development
 
-| Command                | Purpose                                                      |
-| ---------------------- | ------------------------------------------------------------ |
-| `npm run build`        | Emit JavaScript, declarations, and source maps into `dist/`. |
-| `npm run typecheck`    | Run strict TypeScript checking without emitting files.       |
-| `npm test`             | Run the lexer, parser, and schema tests with Vitest.         |
-| `npm run lint`         | Check source and tests with ESLint.                          |
-| `npm run lint:fix`     | Apply automatic ESLint fixes.                                |
-| `npm run format`       | Format the project with Prettier.                            |
-| `npm run format:check` | Check formatting without changing files.                     |
+| Command                | Purpose                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `npm run build`        | Emit JavaScript, declarations, and source maps into `dist/`.   |
+| `npm run typecheck`    | Run strict TypeScript checking without emitting files.         |
+| `npm test`             | Run the lexer, parser, schema, and function tests with Vitest. |
+| `npm run lint`         | Check source and tests with ESLint.                            |
+| `npm run lint:fix`     | Apply automatic ESLint fixes.                                  |
+| `npm run format`       | Format the project with Prettier.                              |
+| `npm run format:check` | Check formatting without changing files.                       |
 
 ## Project structure
 

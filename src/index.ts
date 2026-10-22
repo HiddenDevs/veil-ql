@@ -9,7 +9,7 @@ export type { LexErrorDetail, ParseErrorDetail, ValidationErrorDetail } from "./
 export { Lexer } from "./lexer.js";
 export { Parser } from "./parser.js";
 export { Schema } from "./schema.js";
-export type { FieldConfig, SchemaConfig } from "./schema.js";
+export type { FieldConfig, FunctionSignature, SchemaConfig, SchemaOptions } from "./schema.js";
 export type { Span, Token, TokenKind } from "./token.js";
 export type { Constant, FieldType, PrimitiveType } from "./type-system.js";
 
