@@ -1,10 +1,18 @@
-import type { BinaryOp, ComparisonOp, Expr, Query, SortDirection, SortField } from "./ast.js";
-import { ParseError } from "./errors.js";
+import { isComparisonOp } from "./ast.js";
+import type { BinaryOp, ComparisonOp, Expr, PathExpr, Query, SortDirection, SortField } from "./ast.js";
+import { ParseError } from "../errors.js";
+import { Lexer } from "./lexer.js";
 import { joinSpans } from "./token.js";
 import type { Token, TokenKind } from "./token.js";
 
-export function isComparisonOp(value: string): value is ComparisonOp {
-    return ["==", "!=", ">", ">=", "<", "<=", "IN", "NOT IN"].includes(value);
+/** Parse a boolean filter expression. Checks syntax only; use `Schema#parse` to also validate it. */
+export function parse(source: string): Expr {
+    return new Parser(new Lexer(source).tokenize()).parse();
+}
+
+/** Parse a filter followed by an optional `SORT BY` clause. Checks syntax only. */
+export function parseQuery(source: string): Query {
+    return new Parser(new Lexer(source).tokenize()).parseQuery();
 }
 
 /** Recursive descent, with one method per precedence level. */
@@ -77,17 +85,8 @@ export class Parser {
         this.expect("BY");
         const sorts: SortField[] = [];
         do {
-            const first = this.expect("identifier");
-            if (first.kind !== "identifier") throw this.unexpected(first, ["identifier"]);
-            const parts = [first.value];
-            let fieldSpan = first.span;
-            while (this.match(".") !== undefined) {
-                const part = this.expect("identifier");
-                if (part.kind !== "identifier") throw this.unexpected(part, ["identifier"]);
-                parts.push(part.value);
-                fieldSpan = joinSpans(fieldSpan, part.span);
-            }
-            const field = { kind: "path", parts, span: fieldSpan } as const;
+            const field = this.path(this.expect("identifier"));
+            const fieldSpan = field.span;
             const directionToken = this.match("ASC") ?? this.match("DESC");
             const direction: SortDirection = directionToken?.kind === "DESC" ? "DESC" : "ASC";
             sorts.push({
@@ -97,6 +96,20 @@ export class Parser {
             });
         } while (this.match(",") !== undefined);
         return sorts;
+    }
+
+    /** Continue a dotted field path whose first identifier has already been consumed. */
+    private path(first: Token): PathExpr {
+        if (first.kind !== "identifier") throw this.unexpected(first, ["identifier"]);
+        const parts = [first.value];
+        let span = first.span;
+        while (this.match(".") !== undefined) {
+            const part = this.expect("identifier");
+            if (part.kind !== "identifier") throw this.unexpected(part, ["identifier"]);
+            parts.push(part.value);
+            span = joinSpans(span, part.span);
+        }
+        return { kind: "path", parts, span };
     }
 
     private binary(left: Expr, op: BinaryOp, right: Expr): Expr {
@@ -190,15 +203,7 @@ export class Parser {
                     const { items: args, close } = this.sequence(")");
                     return { kind: "call", name: token.value, args, span: joinSpans(token.span, close.span) };
                 }
-                const parts = [token.value];
-                let span = token.span;
-                while (this.match(".")) {
-                    const part = this.expect("identifier");
-                    if (part.kind !== "identifier") throw this.unexpected(part, ["identifier"]);
-                    parts.push(part.value);
-                    span = joinSpans(span, part.span);
-                }
-                return { kind: "path", parts, span };
+                return this.path(token);
             }
             default:
                 throw this.unexpected(token, ["literal", "identifier", "list", "("]);

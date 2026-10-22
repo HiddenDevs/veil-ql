@@ -1,9 +1,9 @@
-import { parseQueryWithSchema, Schema } from "../src/index.js";
+import { Schema } from "../src/index.js";
 import type { Expr, Literal, SortDirection } from "../src/index.js";
 
 const schema = Schema.fromObject({
     fields: {
-        "user.age": { type: "number" },
+        "user.age": { type: "number", sortable: true },
         "user.status": { type: "string" },
     },
 });
@@ -135,7 +135,8 @@ export class TypeOrmFilter {
     ) {}
 
     public compile(expression: string): CompiledFilter {
-        const query = parseQueryWithSchema(expression, this.schema);
+        // Validates filter fields and that every SORT BY field is declared sortable.
+        const query = this.schema.parseQuery(expression);
         const compiled = compileFilter(query.filter, this.columns);
         const sorts = query.sorts.map((sort) => {
             const path = sort.field.parts.join(".");

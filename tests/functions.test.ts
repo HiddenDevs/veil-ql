@@ -1,19 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { Schema, SchemaError, ValidationError, parseWithSchema } from "../src/index.js";
-import type { FunctionSignature, SchemaConfig, SchemaOptions, ValidationErrorDetail } from "../src/index.js";
+import { Schema, SchemaError, ValidationError } from "../src/index.js";
+import type { FunctionConfig, SchemaConfig, ValidationErrorDetail } from "../src/index.js";
 
-const options = {
-    functions: {
-        startsWith: { parameters: ["string", "string"], returns: "boolean" },
-        length: { parameters: ["string"], returns: "number" },
-        normalize: { parameters: ["string"], returns: "string" },
-        tags: { parameters: [], returns: { list: "string" } },
-        allPositive: { parameters: [{ list: "number" }], returns: "boolean" },
-        matrix: { parameters: [{ list: { list: "number" } }], returns: "boolean" },
-        negate: { parameters: ["boolean"], returns: "boolean" },
+const customFunctions = {
+    startsWith: {
+        parameters: [
+            { name: "text", type: "string" },
+            { name: "prefix", type: "string" },
+        ],
+        returns: "boolean",
     },
-} satisfies SchemaOptions;
+    length: { parameters: ["string"], returns: "number" },
+    normalize: { parameters: ["string"], returns: "string" },
+    tags: { parameters: [], returns: { list: "string" } },
+    allPositive: { parameters: [{ list: "number" }], returns: "boolean" },
+    matrix: { parameters: [{ list: { list: "number" } }], returns: "boolean" },
+    negate: { parameters: ["boolean"], returns: "boolean" },
+} satisfies Record<string, FunctionConfig>;
 
 const config = {
     fields: {
@@ -22,14 +26,11 @@ const config = {
         numbers: { type: { list: "number" } },
         nullableNumbers: { type: { list: "number" }, nullable: true },
     },
-    functions: ["contains", ...Object.keys(options.functions)],
+    functions: { contains: true, ...customFunctions },
 } satisfies SchemaConfig;
 
 for (const factory of ["fromObject", "fromJson"] as const) {
-    const schema =
-        factory === "fromObject"
-            ? Schema.fromObject(config, options)
-            : Schema.fromJson(JSON.stringify(config), options);
+    const schema = factory === "fromObject" ? Schema.fromObject(config) : Schema.fromJson(JSON.stringify(config));
 
     for (const query of [
         'startsWith(name, "admin")',
@@ -43,7 +44,7 @@ for (const factory of ["fromObject", "fromJson"] as const) {
         'negate(startsWith(name, "admin"))',
     ]) {
         test(`${factory} validates custom call ${query}`, () => {
-            assert.doesNotThrow(() => parseWithSchema(query, schema));
+            assert.doesNotThrow(() => schema.parse(query));
         });
     }
 
@@ -70,7 +71,7 @@ for (const factory of ["fromObject", "fromJson"] as const) {
     for (const [query, kind] of failures) {
         test(`${factory} rejects custom call ${query} with ${kind}`, () => {
             assert.throws(
-                () => parseWithSchema(query, schema),
+                () => schema.parse(query),
                 (error: unknown) => {
                     assert.ok(error instanceof ValidationError);
                     assert.equal(error.detail.kind, kind);
@@ -82,9 +83,9 @@ for (const factory of ["fromObject", "fromJson"] as const) {
 }
 
 test("custom argument errors identify the offending argument span", () => {
-    const schema = Schema.fromObject(config, options);
+    const schema = Schema.fromObject(config);
     assert.throws(
-        () => parseWithSchema('startsWith("a", 123)', schema),
+        () => schema.parse('startsWith("a", 123)'),
         (error: unknown) => {
             assert.ok(error instanceof ValidationError);
             assert.deepEqual(error.detail, { kind: "TypeMismatch", expected: "string", actual: "number" });
@@ -95,9 +96,9 @@ test("custom argument errors identify the offending argument span", () => {
 });
 
 test("custom arity errors report the signature count and whole call span", () => {
-    const schema = Schema.fromObject(config, options);
+    const schema = Schema.fromObject(config);
     assert.throws(
-        () => parseWithSchema("startsWith(name)", schema),
+        () => schema.parse("startsWith(name)"),
         (error: unknown) => {
             assert.ok(error instanceof ValidationError);
             assert.deepEqual(error.detail, {
@@ -112,74 +113,63 @@ test("custom arity errors report the signature count and whole call span", () =>
     );
 });
 
-test("registration and permission are separate and defaults remain unchanged", () => {
-    for (const functions of [undefined, [], ["contains"]]) {
-        const schema = Schema.fromObject({ fields: {}, functions }, options);
-        assert.throws(() => parseWithSchema('startsWith("a", "a")', schema), ValidationError);
-        if (functions?.length === 0) {
-            assert.throws(() => parseWithSchema('contains("a", "a")', schema), ValidationError);
+test("only configured functions are enabled and contains is the default", () => {
+    for (const functions of [undefined, {}, { contains: true as const }]) {
+        const schema = Schema.fromObject(functions === undefined ? { fields: {} } : { fields: {}, functions });
+        assert.throws(() => schema.parse('startsWith("a", "a")'), ValidationError);
+        if (functions !== undefined && Object.keys(functions).length === 0) {
+            assert.throws(() => schema.parse('contains("a", "a")'), ValidationError);
         } else {
-            assert.doesNotThrow(() => parseWithSchema('contains("a", "a")', schema));
+            assert.doesNotThrow(() => schema.parse('contains("a", "a")'));
         }
     }
-    const customOnly = Schema.fromObject({ fields: {}, functions: ["startsWith"] }, options);
-    assert.doesNotThrow(() => parseWithSchema('startsWith("a", "a")', customOnly));
-    assert.throws(() => parseWithSchema('contains("a", "a")', customOnly), ValidationError);
-    assert.throws(() => Schema.fromObject(config), SchemaError);
+    const customOnly = Schema.fromObject({ fields: {}, functions: { startsWith: customFunctions.startsWith } });
+    assert.doesNotThrow(() => customOnly.parse('startsWith("a", "a")'));
+    assert.throws(() => customOnly.parse('contains("a", "a")'), ValidationError);
 });
 
-test("function registrations are copied and isolated between schemas", () => {
-    const signature: FunctionSignature = { parameters: [{ list: "number" }], returns: { list: "number" } };
-    const registry = structuredClone({ functions: { copy: signature } });
-    const schema = Schema.fromObject({ fields: {}, functions: ["copy"] }, registry);
-    const parameter = registry.functions.copy.parameters[0];
-    if (typeof parameter !== "object" || typeof registry.functions.copy.returns !== "object") {
-        assert.fail("Expected list signatures");
-    }
-    Object.assign(parameter, { list: "string" });
-    Object.assign(registry.functions.copy.returns, { list: "string" });
-    registry.functions.copy = { parameters: [], returns: "boolean" };
-    assert.doesNotThrow(() => parseWithSchema("copy([1]) == [1]", schema));
-    assert.throws(() => parseWithSchema('copy(["a"]) == [1]', schema), ValidationError);
-    assert.throws(() => Schema.fromObject({ fields: {}, functions: ["copy"] }), SchemaError);
+test("function configurations are copied and isolated between schemas", () => {
+    const shared = structuredClone({ copy: { parameters: [{ list: "number" }], returns: { list: "number" } } });
+    const schema = Schema.fromObject({ fields: {}, functions: shared as Record<string, FunctionConfig> });
+    Object.assign(shared.copy.parameters[0] ?? {}, { list: "string" });
+    Object.assign(shared.copy.returns, { list: "string" });
+    assert.doesNotThrow(() => schema.parse("copy([1]) == [1]"));
+    assert.throws(() => schema.parse('copy(["a"]) == [1]'), ValidationError);
 });
 
-for (const raw of [
+for (const functions of [
     "null",
     "[]",
-    '{"typo": true}',
-    '{"functions": null}',
-    '{"functions": []}',
-    '{"functions": {"contains": {"parameters": [], "returns": "boolean"}}}',
-    '{"functions": {"bad.name": {"parameters": [], "returns": "boolean"}}}',
-    '{"functions": {"AND": {"parameters": [], "returns": "boolean"}}}',
-    '{"functions": {"": {"parameters": [], "returns": "boolean"}}}',
-    '{"functions": {"f": null}}',
-    '{"functions": {"f": {"returns": "boolean"}}}',
-    '{"functions": {"f": {"parameters": null, "returns": "boolean"}}}',
-    '{"functions": {"f": {"parameters": ["integer"], "returns": "boolean"}}}',
-    '{"functions": {"f": {"parameters": [], "returns": "integer"}}}',
-    '{"functions": {"f": {"parameters": [], "returns": {"list": "integer"}}}}',
-    '{"functions": {"f": {"parameters": [], "returns": "boolean", "typo": true}}}',
+    '{"contains": {"parameters": [], "returns": "boolean"}}',
+    '{"startsWith": true}',
+    '{"contains": false}',
+    '{"bad.name": {"parameters": [], "returns": "boolean"}}',
+    '{"AND": {"parameters": [], "returns": "boolean"}}',
+    '{"": {"parameters": [], "returns": "boolean"}}',
+    '{"f": null}',
+    '{"f": {"returns": "boolean"}}',
+    '{"f": {"parameters": null, "returns": "boolean"}}',
+    '{"f": {"parameters": ["integer"], "returns": "boolean"}}',
+    '{"f": {"parameters": [], "returns": "integer"}}',
+    '{"f": {"parameters": [], "returns": {"list": "integer"}}}',
+    '{"f": {"parameters": [], "returns": "boolean", "typo": true}}',
+    '{"f": {"parameters": [{"name": "x"}], "returns": "boolean"}}',
+    '{"f": {"parameters": [{"type": "string", "name": "not valid"}], "returns": "boolean"}}',
+    '{"f": {"parameters": [{"type": "string", "typo": 1}], "returns": "boolean"}}',
+    '{"f": {"parameters": [], "returns": "boolean", "description": 1}}',
 ]) {
-    test(`rejects invalid registry ${raw}`, () => {
-        const options: SchemaOptions = JSON.parse(raw);
-        assert.throws(() => Schema.fromObject({ fields: {} }, options), SchemaError);
-        assert.throws(() => Schema.fromJson('{"fields": {}}', options), SchemaError);
+    test(`rejects invalid function configuration ${functions}`, () => {
+        const json = `{"fields": {}, "functions": ${functions}}`;
+        assert.throws(() => Schema.fromJson(json), SchemaError);
+        assert.throws(() => Schema.fromObject(JSON.parse(json)), SchemaError);
     });
 }
 
-test("prototype property names are not implicitly registered", () => {
-    assert.throws(() => Schema.fromObject({ fields: {}, functions: ["constructor"] }), SchemaError);
-    const signature = { parameters: [], returns: "boolean" } satisfies FunctionSignature;
-    const schema = Schema.fromObject(
-        { fields: {}, functions: ["constructor", "__proto__"] },
-        {
-            functions: {
-                constructor: signature,
-                ["__proto__"]: signature,
-            },
-        },
+test("prototype property names are not implicitly treated as built-ins", () => {
+    assert.throws(() => Schema.fromJson('{"fields": {}, "functions": {"constructor": true}}'), SchemaError);
+    const signature = { parameters: [], returns: "boolean" } satisfies FunctionConfig;
+    const schema = Schema.fromJson(
+        JSON.stringify({ fields: {}, functions: { constructor: signature, ["__proto__"]: signature } }),
     );
-    assert.doesNotThrow(() => parseWithSchema("constructor() AND __proto__()", schema));
+    assert.doesNotThrow(() => schema.parse("constructor() AND __proto__()"));
 });

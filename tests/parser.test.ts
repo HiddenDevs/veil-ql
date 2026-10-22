@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { LexError, Lexer, ParseError, Parser, parse, parseQuery, parseQueryWithSchema, Schema } from "../src/index.js";
+import { LexError, Lexer, ParseError, Parser, parse, parseQuery, Schema } from "../src/index.js";
 import type { ComparisonOp, ParseErrorDetail } from "../src/index.js";
 
 test("preserves logical and comparison precedence", () => {
@@ -79,8 +79,8 @@ test("parses optional single and multiple SORT BY fields", () => {
 
 test("parses queries without sorting and validates their filter", () => {
     assert.deepEqual(parseQuery("age >= 18").sorts, []);
-    const schema = Schema.fromObject({ fields: { age: { type: "number" } } });
-    const query = parseQueryWithSchema("age >= 18 SORT BY age DESC", schema);
+    const schema = Schema.fromObject({ fields: { age: { type: "number", sortable: true } } });
+    const query = schema.parseQuery("age >= 18 SORT BY age DESC");
     assert.equal(query.sorts[0]?.direction, "DESC");
 });
 

@@ -11,7 +11,8 @@ export function joinSpans(left: Span, right: Span): Span {
     };
 }
 
-export type Keyword = "TRUE" | "FALSE" | "NULL" | "AND" | "OR" | "NOT" | "IN" | "SORT" | "BY" | "ASC" | "DESC";
+export const KEYWORDS = ["TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN", "SORT", "BY", "ASC", "DESC"] as const;
+export type Keyword = (typeof KEYWORDS)[number];
 export type Symbol = "==" | "!=" | ">" | ">=" | "<" | "<=" | "+" | "-" | "(" | ")" | "[" | "]" | "," | ".";
 
 export type Token = (
@@ -24,5 +25,12 @@ export type Token = (
 export type TokenKind = Token["kind"];
 
 export function isKeyword(word: string): word is Keyword {
-    return ["TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN", "SORT", "BY", "ASC", "DESC"].includes(word);
+    return KEYWORDS.includes(word as Keyword);
+}
+
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** True for a single identifier that is not a reserved word (case-insensitively). */
+export function isIdentifier(text: string): boolean {
+    return IDENTIFIER.test(text) && !isKeyword(text.toUpperCase());
 }

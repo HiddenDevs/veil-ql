@@ -1,8 +1,9 @@
-import type { BinaryOp, ComparisonOp, Expr } from "./ast.js";
-import { ValidationError } from "./errors.js";
-import type { FieldDefinition, FunctionSignature } from "./schema.js";
-import { compatible, mergeTypes, sameConstant, typeName } from "./type-system.js";
-import type { Constant, FieldType, ValueType } from "./type-system.js";
+import { ValidationError } from "../errors.js";
+import type { FieldDefinition, FunctionDefinition } from "../schema/model.js";
+import { compatible, mergeTypes, sameConstant } from "../schema/types.js";
+import type { Constant, FieldType, ValueType } from "../schema/types.js";
+import type { BinaryOp, ComparisonOp, Expr, ExprOf, PathExpr, SortField } from "../syntax/ast.js";
+import { mismatch } from "./mismatch.js";
 
 function matchesParameter(expected: FieldType, actual: ValueType): boolean {
     if (actual === "unknown") return true;
@@ -10,17 +11,7 @@ function matchesParameter(expected: FieldType, actual: ValueType): boolean {
     return typeof actual === "object" && "list" in actual && matchesParameter(expected.list, actual.list);
 }
 
-function mismatch(expr: Expr, expected: ValueType, actual: ValueType): never {
-    throw new ValidationError(
-        {
-            kind: "TypeMismatch",
-            expected: typeName(expected),
-            actual: typeName(actual),
-        },
-        expr.span,
-    );
-}
-
+/** Fold a literal, negated number, or list of those into a constant. */
 function constant(expr: Expr): Constant | undefined {
     switch (expr.kind) {
         case "literal":
@@ -43,11 +34,11 @@ function constant(expr: Expr): Constant | undefined {
     }
 }
 
-/** Internal semantic pass; syntax parsing remains schema independent. */
+/** Static semantic checks against a schema. Syntax parsing stays schema independent. */
 export class Validator {
     public constructor(
         private readonly fields: ReadonlyMap<string, FieldDefinition>,
-        private readonly functions: ReadonlyMap<string, FunctionSignature | "contains">,
+        private readonly functions: ReadonlyMap<string, FunctionDefinition>,
     ) {}
 
     public validateFilter(expr: Expr): void {
@@ -55,19 +46,37 @@ export class Validator {
         if (actual !== "boolean") mismatch(expr, "boolean", actual);
     }
 
-    private field(expr: Expr): { path: string; definition: FieldDefinition } | undefined {
-        if (expr.kind !== "path") return undefined;
+    public validateSorts(sorts: readonly SortField[]): void {
+        for (const { field } of sorts) {
+            const definition = this.lookup(field);
+            if (!definition.sortable) {
+                throw new ValidationError({ kind: "FieldNotSortable", field: definition.path }, field.span);
+            }
+        }
+    }
+
+    private lookup(expr: PathExpr): FieldDefinition {
         const path = expr.parts.join(".");
         const definition = this.fields.get(path);
-        return definition === undefined ? undefined : { path, definition };
+        if (definition === undefined) throw new ValidationError({ kind: "UnknownField", field: path }, expr.span);
+        return definition;
+    }
+
+    /** The field definition when `expr` is a direct field reference. */
+    private field(expr: Expr): FieldDefinition | undefined {
+        return expr.kind === "path" ? this.fields.get(expr.parts.join(".")) : undefined;
     }
 
     private checkValues(fieldExpr: Expr, valueExpr: Expr): void {
-        const field = this.field(fieldExpr);
-        if (field?.definition.values === undefined) return;
+        const allowed = this.field(fieldExpr)?.values;
+        if (allowed === undefined) return;
         const value = constant(valueExpr);
-        if (value !== undefined && !field.definition.values.some((allowed) => sameConstant(allowed, value))) {
-            throw new ValidationError({ kind: "ValueNotAllowed", field: field.path }, valueExpr.span);
+        if (value !== undefined && !allowed.some((candidate) => sameConstant(candidate, value))) {
+            const field = (fieldExpr as PathExpr).parts.join(".");
+            throw new ValidationError(
+                { kind: "ValueNotAllowed", field, allowed: structuredClone(allowed) },
+                valueExpr.span,
+            );
         }
     }
 
@@ -77,8 +86,11 @@ export class Validator {
             return;
         }
         const field = this.field(expr);
-        if (field?.definition.operators !== undefined && !field.definition.operators.includes(operator)) {
-            throw new ValidationError({ kind: "OperatorNotAllowed", field: field.path, operator }, expr.span);
+        if (field?.operators !== undefined && !field.operators.includes(operator)) {
+            throw new ValidationError(
+                { kind: "OperatorNotAllowed", field: field.path, operator, allowed: [...field.operators] },
+                expr.span,
+            );
         }
     }
 
@@ -88,8 +100,9 @@ export class Validator {
                 if (expr.value === null) return "null";
                 switch (typeof expr.value) {
                     case "number":
-                        if (!Number.isFinite(expr.value))
+                        if (!Number.isFinite(expr.value)) {
                             throw new ValidationError({ kind: "NonFiniteNumber" }, expr.span);
+                        }
                         return "number";
                     case "string":
                         return "string";
@@ -98,11 +111,11 @@ export class Validator {
                 }
                 throw new TypeError("Invalid literal in AST");
             case "path": {
-                const field = this.field(expr);
-                if (field === undefined) {
-                    throw new ValidationError({ kind: "UnknownField", field: expr.parts.join(".") }, expr.span);
+                const field = this.lookup(expr);
+                if (!field.filterable) {
+                    throw new ValidationError({ kind: "FieldNotFilterable", field: field.path }, expr.span);
                 }
-                return field.definition.type;
+                return field.valueType;
             }
             case "list": {
                 let type: ValueType = "unknown";
@@ -126,48 +139,26 @@ export class Validator {
         }
     }
 
-    private call(expr: Extract<Expr, { kind: "call" }>): ValueType {
-        const signature = this.functions.get(expr.name);
-        if (signature === undefined) {
+    private call(expr: ExprOf<"call">): ValueType {
+        const fn = this.functions.get(expr.name);
+        if (fn === undefined) {
             throw new ValidationError({ kind: "UnknownFunction", function: expr.name }, expr.span);
         }
-        const expected = signature === "contains" ? 2 : signature.parameters.length;
+        const expected = fn.kind === "builtin" ? fn.builtin.arity : fn.parameters.length;
         if (expr.args.length !== expected) {
             throw new ValidationError(
                 { kind: "InvalidArgumentCount", function: expr.name, expected, actual: expr.args.length },
                 expr.span,
             );
         }
-        if (signature !== "contains") {
-            for (const [index, argument] of expr.args.entries()) {
-                const parameter = signature.parameters[index];
-                if (parameter === undefined) throw new TypeError("Missing function parameter definition");
-                const actual = this.infer(argument);
-                if (!matchesParameter(parameter, actual)) mismatch(argument, parameter, actual);
-            }
-            return signature.returns;
+        if (fn.kind === "builtin") return fn.builtin.check(expr.args, (arg) => this.infer(arg));
+        for (const [index, argument] of expr.args.entries()) {
+            const parameter = fn.parameters[index];
+            if (parameter === undefined) throw new TypeError("Missing function parameter definition");
+            const actual = this.infer(argument);
+            if (!matchesParameter(parameter.type, actual)) mismatch(argument, parameter.type, actual);
         }
-        const [containerExpr, needleExpr] = expr.args;
-        if (containerExpr === undefined || needleExpr === undefined) {
-            throw new TypeError("Missing contains arguments in AST");
-        }
-        const container = this.infer(containerExpr);
-        const needle = this.infer(needleExpr);
-        if (container === "string") {
-            if (needle !== "string") mismatch(needleExpr, "string", needle);
-        } else if (typeof container === "object" && "list" in container) {
-            if (!compatible(container.list, needle)) mismatch(needleExpr, container.list, needle);
-        } else {
-            throw new ValidationError(
-                {
-                    kind: "TypeMismatch",
-                    expected: "string or list",
-                    actual: typeName(container),
-                },
-                containerExpr.span,
-            );
-        }
-        return "boolean";
+        return fn.returns;
     }
 
     private binary(left: Expr, op: BinaryOp, right: Expr): ValueType {

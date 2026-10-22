@@ -1,8 +1,22 @@
 # Examples
 
 These examples show how to use Veil QL in an application. Veil QL parses and
-validates a filter; application code is responsible for translating the AST
+validates a query; application code is responsible for translating the AST
 into its database query.
+
+## AI agent
+
+[`ai-agent.ts`](./ai-agent.ts) shows how to let an AI agent write queries:
+
+1. Declare a schema with `description`s on the schema, fields, functions, and
+   parameters, plus example queries (validated when the schema is created).
+2. Turn `schema.describe()` into a system prompt with a small renderer, or embed
+   it in a function-calling tool definition.
+3. Validate the agent's output with `schema.parseQuery`, and return
+   `QueryError` messages to the agent so it can correct its query.
+
+The rendering is plain string templating over JSON data, so it works with any
+model provider or prompt framework.
 
 ## TypeORM
 
@@ -27,9 +41,9 @@ const users = await userFilter
 ```
 
 `applyTo` accepts TypeORM's query builder structurally, so the example does not
-add TypeORM as a dependency. It compiles the filter, validates every sort path
-against the adapter's explicit column map, then applies filter parameters and
-sort order. The caller still decides when to execute the query with `.getMany()`.
+add TypeORM as a dependency. It compiles the filter, relies on the schema to
+reject sort fields that are not `sortable`, checks every sort path against the
+adapter's explicit column map, then applies filter parameters and sort order. The caller still decides when to execute the query with `.getMany()`.
 
 The example supports `AND`, `OR`, `NOT`, comparisons, and `IN`/`NOT IN` with
 literal lists. It deliberately does not translate function calls such as
@@ -53,9 +67,8 @@ column strings must be TypeORM property paths valid for the query builder alias
 const users = await userFilter.applyTo(userRepository.createQueryBuilder("user"), request.query.filter).getMany();
 ```
 
-Sort-only paths may be included in the column map even when they are not
-filterable fields in the Veil QL schema. They are accepted for sorting only,
-while filter fields still require schema validation:
+Sort-only fields are declared in the schema with `filterable: false, sortable:
+true` and mapped to a column like any other field:
 
 ```ts
 const compiled = userFilter.compile('user.status == "active" SORT BY user.age DESC');
@@ -85,8 +98,8 @@ related customer's email, then sort by total followed by customer email:
 order.status IN ["paid", "shipped"] AND order.total >= 100 AND customer.email != "blocked@example.com" SORT BY order.total DESC, customer.email ASC
 ```
 
-The filter schema limits status values and only exposes the fields listed in
-its TypeORM column map. Tenant ID is supplied by trusted application context
+The filter schema limits status values, marks which fields are sortable, and
+declares `order.createdAt` as a sort-only field. Tenant ID is supplied by trusted application context
 rather than the filter. The sample uses TypeORM-compatible structural
 interfaces and does not require TypeORM to be installed in this project.
 

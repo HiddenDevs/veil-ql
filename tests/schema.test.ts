@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { Schema, SchemaError, ValidationError, parse, parseWithSchema } from "../src/index.js";
+import { Schema, SchemaError, ValidationError, parse } from "../src/index.js";
 import type { Expr, SchemaConfig, ValidationErrorDetail } from "../src/index.js";
 
 const config = {
@@ -26,11 +26,11 @@ const schema = Schema.fromJson(JSON.stringify(config));
 test("constructs a schema from typed configuration or an already parsed object", () => {
     const parsed: unknown = JSON.parse(JSON.stringify(config));
     for (const input of [config, parsed]) {
-        const schema = Schema.fromObject(input);
-        assert.doesNotThrow(() => parseWithSchema('user.age >= 18 AND contains(user.tags, "trusted")', schema));
-        assert.throws(() => parseWithSchema('user.age >= "eighteen"', schema), ValidationError);
-        assert.throws(() => parseWithSchema("missing == 1", schema), ValidationError);
-        assert.throws(() => parseWithSchema('user.status == "deleted"', schema), ValidationError);
+        const schema = Schema.fromObject(input as SchemaConfig);
+        assert.doesNotThrow(() => schema.parse('user.age >= 18 AND contains(user.tags, "trusted")'));
+        assert.throws(() => schema.parse('user.age >= "eighteen"'), ValidationError);
+        assert.throws(() => schema.parse("missing == 1"), ValidationError);
+        assert.throws(() => schema.parse('user.status == "deleted"'), ValidationError);
     }
 });
 
@@ -39,22 +39,22 @@ test("does not retain mutable references to object configuration", () => {
         fields: {
             numbers: { type: { list: "number" }, values: [[1, 2]], operators: ["=="] },
         },
-        functions: ["contains"],
+        functions: { contains: true },
     };
-    const schema = Schema.fromObject(config);
+    const schema = Schema.fromObject(config as SchemaConfig);
     config.fields.numbers.type.list = "string";
     config.fields.numbers.values[0]?.push(3);
     config.fields.numbers.operators.length = 0;
-    config.functions.length = 0;
+    Object.assign(config.functions, { contains: { parameters: [], returns: "boolean" } });
 
-    assert.doesNotThrow(() => parseWithSchema("numbers == [1, 2]", schema));
-    assert.throws(() => parseWithSchema("numbers == [1, 2, 3]", schema), ValidationError);
-    assert.doesNotThrow(() => parseWithSchema("contains(numbers, 1)", schema));
+    assert.doesNotThrow(() => schema.parse("numbers == [1, 2]"));
+    assert.throws(() => schema.parse("numbers == [1, 2, 3]"), ValidationError);
+    assert.doesNotThrow(() => schema.parse("contains(numbers, 1)"));
 });
 
 test("rejects non-JSON values in object configuration", () => {
     for (const value of [undefined, "{}", 1, true, { fields: { x: { type: "number", values: [NaN] } } }]) {
-        assert.throws(() => Schema.fromObject(value), SchemaError);
+        assert.throws(() => Schema.fromObject(value as SchemaConfig), SchemaError);
     }
 });
 
@@ -79,7 +79,7 @@ for (const query of [
     "[1, 2] IN [[1, 2], []]",
 ]) {
     test(`accepts ${query}`, () => {
-        assert.doesNotThrow(() => parseWithSchema(query, schema));
+        assert.doesNotThrow(() => schema.parse(query));
     });
 }
 
@@ -125,7 +125,7 @@ const failures: readonly [string, ValidationErrorDetail["kind"]][] = [
 for (const [query, kind] of failures) {
     test(`rejects ${query} with ${kind}`, () => {
         assert.throws(
-            () => parseWithSchema(query, schema),
+            () => schema.parse(query),
             (error: unknown) => {
                 assert.ok(error instanceof ValidationError);
                 assert.equal((error as ValidationError).detail.kind, kind);
@@ -136,10 +136,10 @@ for (const [query, kind] of failures) {
 }
 
 test("reports UTF-8 spans and supports validating an existing AST", () => {
-    schema.validateFilter(parse("user.age >= 18"));
+    schema.validate(parse("user.age >= 18"));
     assert.equal(parse("unknown == true").kind, "binary");
     assert.throws(
-        () => parseWithSchema('"é" == user.missing', schema),
+        () => schema.parse('"é" == user.missing'),
         (error: unknown) => {
             assert.ok(error instanceof ValidationError);
             assert.deepEqual((error as ValidationError).span, { start: 8, end: 20 });
@@ -149,10 +149,10 @@ test("reports UTF-8 spans and supports validating an existing AST", () => {
 });
 
 test("functions can be disabled and unknown names cannot be configured", () => {
-    const disabled = Schema.fromJson('{"fields": {}, "functions": []}');
-    assert.throws(() => parseWithSchema('contains("a", "a")', disabled), ValidationError);
-    assert.doesNotThrow(() => parseWithSchema("true", disabled));
-    assert.throws(() => Schema.fromJson('{"fields": {}, "functions": ["eval"]}'), SchemaError);
+    const disabled = Schema.fromJson('{"fields": {}, "functions": {}}');
+    assert.throws(() => disabled.parse('contains("a", "a")'), ValidationError);
+    assert.doesNotThrow(() => disabled.parse("true"));
+    assert.throws(() => Schema.fromJson('{"fields": {}, "functions": {"eval": true}}'), SchemaError);
 });
 
 for (const raw of [
@@ -177,11 +177,21 @@ for (const raw of [
     '{"fields": {"x": {"type": "number", "values": {}}}}',
     '{"fields": {}, "functions": null}',
     '{"fields": {}, "functions": "contains"}',
+    '{"fields": {}, "functions": ["contains"]}',
+    '{"fields": {}, "description": 1}',
+    '{"fields": {}, "description": " "}',
+    '{"fields": {"x": {"type": "number", "description": 1}}}',
+    '{"fields": {"x": {"type": "number", "sortable": "yes"}}}',
+    '{"fields": {"x": {"type": "number", "filterable": false}}}',
+    '{"fields": {"x": {"type": {"list": "number"}, "sortable": true}}}',
+    '{"fields": {}, "examples": {}}',
+    '{"fields": {}, "examples": [{"query": "true"}]}',
+    '{"fields": {}, "examples": [{"query": 1, "description": "d"}]}',
+    '{"fields": {}, "examples": [{"query": "true", "description": "d", "typo": 1}]}',
 ]) {
     test(`rejects invalid schema ${raw}`, () => {
         assert.throws(() => Schema.fromJson(raw), SchemaError);
-        const parsed: unknown = JSON.parse(raw);
-        assert.throws(() => Schema.fromObject(parsed), SchemaError);
+        assert.throws(() => Schema.fromObject(JSON.parse(raw)), SchemaError);
     });
 }
 
@@ -201,8 +211,8 @@ test("validates field paths and treats prototype property names as ordinary fiel
         assert.throws(() => Schema.fromJson(JSON.stringify({ fields: { [path]: { type: "number" } } })), SchemaError);
     }
     const special = Schema.fromJson('{"fields": {"_user.age2": {"type": "number"}, "__proto__": {"type": "boolean"}}}');
-    assert.doesNotThrow(() => parseWithSchema("_user.age2 == 1 AND __proto__", special));
-    assert.throws(() => parseWithSchema("constructor == 1", special), ValidationError);
+    assert.doesNotThrow(() => special.parse("_user.age2 == 1 AND __proto__"));
+    assert.throws(() => special.parse("constructor == 1"), ValidationError);
 });
 
 test("supports whole-list enums, nullable enums, and empty operator lists", () => {
@@ -216,10 +226,10 @@ test("supports whole-list enums, nullable enums, and empty operator lists", () =
         }),
     );
     for (const query of ["numbers == [1.0, 2.0]", "numbers == []", "status == null"]) {
-        assert.doesNotThrow(() => parseWithSchema(query, enums));
+        assert.doesNotThrow(() => enums.parse(query));
     }
-    assert.throws(() => parseWithSchema("numbers == [3]", enums), ValidationError);
-    assert.throws(() => parseWithSchema("disabled == 1", enums), ValidationError);
+    assert.throws(() => enums.parse("numbers == [3]"), ValidationError);
+    assert.throws(() => enums.parse("disabled == 1"), ValidationError);
 });
 
 test("does not lose inferred types after nullable or empty list elements", () => {
@@ -229,7 +239,7 @@ test("does not lose inferred types after nullable or empty list elements", () =>
         "contains([null, user.email], 1)",
         "user.matrix == [[], [1], [false]]",
     ]) {
-        assert.throws(() => parseWithSchema(query, schema), ValidationError);
+        assert.throws(() => schema.parse(query), ValidationError);
     }
 });
 
@@ -237,7 +247,7 @@ test("rejects nonfinite values in a manually constructed AST", () => {
     for (const value of [NaN, Infinity, -Infinity]) {
         const expr: Expr = { kind: "literal", value, span: { start: 0, end: 1 } };
         assert.throws(
-            () => schema.validateFilter(expr),
+            () => schema.validate(expr),
             (error: unknown) => {
                 assert.ok(error instanceof ValidationError);
                 assert.equal((error as ValidationError).detail.kind, "NonFiniteNumber");
@@ -249,15 +259,12 @@ test("rejects nonfinite values in a manually constructed AST", () => {
 
 test("validates a larger composed filter with field-to-field comparisons", () => {
     assert.doesNotThrow(() =>
-        parseWithSchema(
-            `
+        schema.parse(`
     NOT (user.status == "banned" OR user.age < 18)
     AND (user.active AND contains(user.tags, "trusted"))
     AND user.age >= account.age
     AND user.email != null
     AND user.status IN ["active", "pending"]
-  `,
-            schema,
-        ),
+  `),
     );
 });

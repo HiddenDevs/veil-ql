@@ -5,12 +5,13 @@ import type { CompiledSort } from "./typeorm-filter.js";
 
 const orderSchema = Schema.fromObject({
     fields: {
+        "order.createdAt": { type: "number", filterable: false, sortable: true },
         "order.status": {
             type: "string",
             values: ["pending", "paid", "shipped", "cancelled"],
         },
-        "order.total": { type: "number" },
-        "customer.email": { type: "string" },
+        "order.total": { type: "number", sortable: true },
+        "customer.email": { type: "string", sortable: true },
     },
 });
 

@@ -1,38 +1,38 @@
-import type { Expr, Query } from "./ast.js";
-import { Lexer } from "./lexer.js";
-import { Parser } from "./parser.js";
-import type { Schema } from "./schema.js";
+// Syntax: schema-independent parsing.
+export { parse, parseQuery, Parser } from "./syntax/parser.js";
+export { Lexer } from "./syntax/lexer.js";
+export { COMPARISON_OPERATORS } from "./syntax/ast.js";
+export type {
+    BinaryOp,
+    ComparisonOp,
+    Expr,
+    ExprOf,
+    Literal,
+    PathExpr,
+    Query,
+    SortDirection,
+    SortField,
+    UnaryOp,
+} from "./syntax/ast.js";
+export { KEYWORDS } from "./syntax/token.js";
+export type { Keyword, Span, Token, TokenKind } from "./syntax/token.js";
 
-export type { BinaryOp, ComparisonOp, Expr, Literal, Query, SortDirection, SortField, UnaryOp } from "./ast.js";
-export { LexError, ParseError, SchemaError, ValidationError } from "./errors.js";
-export type { LexErrorDetail, ParseErrorDetail, ValidationErrorDetail } from "./errors.js";
-export { Lexer } from "./lexer.js";
-export { Parser } from "./parser.js";
-export { Schema } from "./schema.js";
-export type { FieldConfig, FunctionSignature, SchemaConfig, SchemaOptions } from "./schema.js";
-export type { Span, Token, TokenKind } from "./token.js";
-export type { Constant, FieldType, PrimitiveType } from "./type-system.js";
+// Schema: configuration and validation.
+export { Schema } from "./schema/schema.js";
+export type { ExampleConfig, FieldConfig, FunctionConfig, ParameterConfig, SchemaConfig } from "./schema/config.js";
+export type { Constant, FieldType, PrimitiveType } from "./schema/types.js";
 
-/** Parse syntax only, without requiring a schema. */
-export function parse(source: string): Expr {
-    return new Parser(new Lexer(source).tokenize()).parse();
-}
+// AI descriptions.
+export { LANGUAGE_REFERENCE } from "./describe/language.js";
+export type { LanguageReference } from "./describe/language.js";
+export type {
+    ExampleDescription,
+    FieldDescription,
+    FunctionDescription,
+    ParameterDescription,
+    SchemaDescription,
+} from "./describe/describe.js";
 
-/** Parse a boolean filter with an optional SORT BY clause. */
-export function parseQuery(source: string): Query {
-    return new Parser(new Lexer(source).tokenize()).parseQuery();
-}
-
-/** Parse and statically validate a boolean filter against a reusable schema. */
-export function parseWithSchema(source: string, schema: Schema): Expr {
-    const expr = parse(source);
-    schema.validateFilter(expr);
-    return expr;
-}
-
-/** Parse and validate the filter portion of a query with optional sorting. */
-export function parseQueryWithSchema(source: string, schema: Schema): Query {
-    const query = parseQuery(source);
-    schema.validateFilter(query.filter);
-    return query;
-}
+// Errors.
+export { describeErrorDetail, LexError, ParseError, QueryError, SchemaError, ValidationError } from "./errors.js";
+export type { LexErrorDetail, ParseErrorDetail, QueryErrorDetail, ValidationErrorDetail } from "./errors.js";

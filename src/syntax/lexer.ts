@@ -1,4 +1,4 @@
-import { LexError } from "./errors.js";
+import { LexError } from "../errors.js";
 import { isKeyword } from "./token.js";
 import type { Span, Symbol, Token } from "./token.js";
 
