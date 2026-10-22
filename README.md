@@ -1,28 +1,48 @@
-# BQL in TypeScript
+# Veil QL
 
-A standalone, zero-runtime-dependency implementation of the Rust BQL lexer,
-parser, and JSON-schema validation pass. The Rust project is unchanged.
+Veil QL (`veil-ql`) is a zero-runtime-dependency TypeScript library for parsing
+and statically validating filter expressions. Turn a query string into a typed
+abstract syntax tree (AST), and check it against the fields, types, values, and
+operators your application allows.
 
-Requires Node.js 22+ and npm.
+Use it as the query-language layer for search APIs, filter builders, or rule
+configuration:
 
-```sh
-cd typescript
-npm install
-npm test
-npm run example
+```text
+user.age >= 18 AND user.status IN ["active", "pending"]
 ```
 
-`npm run build` emits JavaScript, declarations, and source maps into `dist/`.
-`npm run typecheck` runs strict TypeScript checking without emitting files.
-`npm run lint` checks the source and tests with ESLint. `npm run format` formats
-the project with Prettier, and `npm run format:check` checks formatting without
-writing changes. EditorConfig and Prettier use four spaces for indentation and a
-120-character line width.
+Veil QL handles tokenization, parsing, and semantic validation. It does **not**
+execute queries, generate SQL, or validate application records. Your application
+is responsible for interpreting or translating the resulting AST.
 
-## Usage
+## Features
+
+- Syntax-only parsing or schema-aware validation of boolean filters.
+- Dotted field paths, comparisons, logical operators, lists, and `contains`.
+- JSON-based schema configuration with field types, nullability, allowed values,
+  operator restrictions, and a function allowlist.
+- Readonly, discriminated AST types and structured errors with source spans.
+- ESM output, TypeScript declarations, and source maps.
+
+## Getting started
+
+Requires Node.js 22+ and npm. From the repository root:
+
+```sh
+npm install
+npm run build
+npm test
+```
+
+The package metadata currently uses the name `bql` and marks the package private.
+Until publishing is configured, the examples below use the local build rather
+than assuming `veil-ql` is available from a registry.
+
+## Parse and validate a filter
 
 ```ts
-import { Schema, ValidationError, parse, parseWithSchema } from "./src/index.js";
+import { Schema, parse, parseWithSchema } from "./dist/src/index.js";
 
 const schema = Schema.fromJson(`{
   "fields": {
@@ -43,16 +63,29 @@ const schema = Schema.fromJson(`{
 
 const ast = parseWithSchema('user.age >= 18 AND user.status == "active" AND contains(user.tags, "trusted")', schema);
 
-// Syntax-only parsing and separate validation are also supported.
-schema.validateFilter(parse("user.age >= 18"));
+console.log(ast.kind); // "binary"
 
-try {
-    parseWithSchema('user.age >= "eighteen"', schema);
-} catch (error) {
-    if (!(error instanceof ValidationError)) throw error;
-    console.error(error.detail, error.span);
-}
+// Parse without a schema, then validate the AST separately.
+schema.validateFilter(parse("user.age >= 18"));
 ```
+
+`parse(source)` checks syntax and returns an `Expr`; it does not check whether
+fields exist or whether their types are compatible. `parseWithSchema(source,
+schema)` also checks that the expression is a valid, non-nullable boolean filter.
+
+## Schema configuration
+
+Schemas describe the query surface your application exposes, not the shape of
+runtime records. Dotted paths such as `user.age` are explicitly declared fields.
+
+| Option      | Purpose                                                                                                               |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `fields`    | Map field paths to their definitions. Required.                                                                       |
+| `type`      | `"number"`, `"string"`, `"boolean"`, or recursively `{ "list": TYPE }`. Required per field.                           |
+| `nullable`  | Allow null for a field. Defaults to `false`.                                                                          |
+| `values`    | Restrict literal comparisons to a nonempty set of allowed values. Omitted or `null` means unrestricted.               |
+| `operators` | Allow specific direct comparison operators. Omitted or `null` allows type-compatible comparisons; `[]` disables them. |
+| `functions` | Allow implemented functions. Defaults to `["contains"]`; `[]` disables function calls.                                |
 
 For a configuration file, use `Schema.fromJson(await readFile(path, "utf8"))`
 with `readFile` from `node:fs/promises`. Reuse the resulting schema for queries.
@@ -60,29 +93,18 @@ with `readFile` from `node:fs/promises`. Reuse the resulting schema for queries.
 objects with `satisfies`; JSON is still checked at runtime, not cast to trusted
 types.
 
-## Design
+Unknown configuration properties, invalid field paths, mismatched allowed values,
+and invalid operator/type combinations are rejected with `SchemaError`.
 
-- [lexer.ts](src/lexer.ts): stateful scanner; `nextToken()` or `tokenize()`.
-- [parser.ts](src/parser.ts): recursive descent with explicit precedence levels.
-- [ast.ts](src/ast.ts): readonly discriminated unions, rather than an inheritance
-  hierarchy or mutable untyped nodes.
-- [schema.ts](src/schema.ts): factory that checks unknown JSON and constructs a
-  reusable schema without exposing its configuration.
-- [validator.ts](src/validator.ts): separate semantic pass over the AST.
-- [type-system.ts](src/type-system.ts): shared type compatibility, list unification,
-  and constant comparison.
-- [errors.ts](src/errors.ts): distinct lexical, parse, schema, and validation
-  exceptions, with discriminated details for query errors.
-- [index.ts](src/index.ts): public API, without example-program side effects.
-- [main.ts](src/main.ts): runnable valid and invalid query examples.
+## Filter language
 
-Separation of concerns and exhaustive typed switches keep the implementation
-extensible without unnecessary factories, visitor classes, or dependency
-injection frameworks.
-
-## Language and configuration
-
-The grammar and schema format follow the [Rust implementation](../README.md):
+```text
+user.age >= 18
+user.status IN ["active", "pending"]
+NOT (user.status == "banned") AND user.age < 65
+user.email != null
+contains(user.tags, "trusted")
+```
 
 - ASCII identifiers and case-insensitive reserved words; exact case-sensitive
   dotted field paths and function names.
@@ -91,16 +113,10 @@ The grammar and schema format follow the [Rust implementation](../README.md):
 - Precedence, highest first: primary/grouping, unary minus, comparisons, `NOT`,
   `AND`, `OR`. Comparisons cannot chain, including `NOT IN`.
 - Strings accept `\n`, `\r`, `\t`, `\\`, `\"`, and `\'` escapes.
-- Types are `"number"`, `"string"`, `"boolean"`, or recursively `{"list": TYPE}`.
-- Optional `nullable`, `values`, and `operators` control field validation.
-  Unknown properties, invalid types, reserved-word paths, mistyped enum values,
-  and impossible ordering configurations are rejected.
 - `operators` may contain `==`, `!=`, `>`, `>=`, `<`, `<=`, `IN`, `NOT IN`.
-  Omission allows type-compatible comparisons; `[]` disables direct comparisons.
   Restrictions apply to direct field operands, including through unary minus,
   not to boolean field use or function arguments.
-- `functions` defaults to `["contains"]`; `[]` disables functions.
-  `contains(string, string)` and `contains(list<T>, T)` return boolean.
+- `contains(string, string)` and `contains(list<T>, T)` return boolean.
 - Equality requires compatible types. Only nullable fields accept null
   comparisons. Logical operations and filter roots require non-nullable
   booleans; ordering and unary minus require non-nullable numbers.
@@ -112,10 +128,56 @@ The grammar and schema format follow the [Rust implementation](../README.md):
   field-to-field comparisons or functions. List-field enums describe whole
   lists, not their elements; nullable enums must include null explicitly.
 
-Spans use half-open **UTF-8 byte offsets**, matching Rust, not JavaScript UTF-16
+Validation is static. Nullable values do not acquire flow-sensitive narrowing
+from preceding conditions: a null check does not make a subsequent nullable
+number comparison valid.
+
+## Error handling
+
+Veil QL distinguishes `LexError` (invalid tokens), `ParseError` (invalid syntax),
+`SchemaError` (invalid configuration), and `ValidationError` (invalid filter
+semantics). Query errors expose a discriminated `detail` object and a `span`.
+
+```ts
+import { LexError, ParseError, ValidationError, parseWithSchema } from "./dist/src/index.js";
+
+// Using the schema from the example above:
+try {
+    parseWithSchema('user.age >= "eighteen"', schema);
+} catch (error) {
+    if (error instanceof LexError || error instanceof ParseError || error instanceof ValidationError) {
+        console.error(error.detail.kind, error.span);
+    } else {
+        throw error;
+    }
+}
+```
+
+AST and error spans use half-open **UTF-8 byte offsets**, not JavaScript UTF-16
 indices. For JS string slicing, translate offsets to UTF-16 indices or slice
 UTF-8 encoded bytes first. Numbers use JavaScript's IEEE-754 `number`, matching
-Rust's `f64` semantics.
+double-precision floating-point semantics.
 
-Validation is static, not evaluation or runtime record validation. Nullable
-values do not acquire flow-sensitive narrowing from preceding conditions.
+## Development
+
+| Command                | Purpose                                                      |
+| ---------------------- | ------------------------------------------------------------ |
+| `npm run build`        | Emit JavaScript, declarations, and source maps into `dist/`. |
+| `npm run typecheck`    | Run strict TypeScript checking without emitting files.       |
+| `npm test`             | Run the lexer, parser, and schema tests with Vitest.         |
+| `npm run lint`         | Check source and tests with ESLint.                          |
+| `npm run lint:fix`     | Apply automatic ESLint fixes.                                |
+| `npm run format`       | Format the project with Prettier.                            |
+| `npm run format:check` | Check formatting without changing files.                     |
+
+## Project structure
+
+- [index.ts](src/index.ts): public API and parsing helpers.
+- [lexer.ts](src/lexer.ts): tokenization via `nextToken()` or `tokenize()`.
+- [parser.ts](src/parser.ts): recursive-descent parsing with explicit precedence.
+- [ast.ts](src/ast.ts): readonly discriminated expression types.
+- [schema.ts](src/schema.ts): checked, reusable schema configuration.
+- [validator.ts](src/validator.ts): semantic validation of filter expressions.
+- [type-system.ts](src/type-system.ts): type compatibility and constant checks.
+- [errors.ts](src/errors.ts): structured lexical, parse, schema, and validation errors.
+- [tests](tests): language and validation behavior tests.
