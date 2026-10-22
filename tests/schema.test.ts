@@ -107,7 +107,7 @@ test("reports UTF-8 spans and supports validating an existing AST", () => {
         () => parseWithSchema('"é" == user.missing', schema),
         (error: unknown) => {
             assert.ok(error instanceof ValidationError);
-            assert.deepEqual(error.span, { start: 8, end: 20 });
+            assert.deepEqual((error as ValidationError).span, { start: 8, end: 20 });
             return true;
         },
     );
@@ -153,7 +153,7 @@ test("malformed JSON preserves the underlying syntax error as its cause", () => 
         () => Schema.fromJson("{"),
         (error: unknown) => {
             assert.ok(error instanceof SchemaError);
-            assert.ok(error.cause instanceof SyntaxError);
+            assert.ok((error as SchemaError).cause instanceof SyntaxError);
             return true;
         },
     );
@@ -203,7 +203,7 @@ test("rejects nonfinite values in a manually constructed AST", () => {
             () => schema.validateFilter(expr),
             (error: unknown) => {
                 assert.ok(error instanceof ValidationError);
-                assert.equal(error.detail.kind, "NonFiniteNumber");
+                assert.equal((error as ValidationError).detail.kind, "NonFiniteNumber");
                 return true;
             },
         );
