@@ -36,6 +36,10 @@ Requires Node.js 22+ and npm. Install Veil-QL from npm:
 npm install @hiddendevs/veil-ql
 ```
 
+TypeScript declarations are included; no separate `@types` package is needed.
+The package supports `node` (legacy), `node16`/`nodenext`, and `bundler` TypeScript
+module resolution. Runtime output is ESM-only.
+
 ## Parse and validate a query
 
 ```ts
