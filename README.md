@@ -30,7 +30,7 @@ is responsible for interpreting or translating the resulting AST.
 
 ## Getting started
 
-Requires Node.js 22+ and npm. Install Veil-QL from npm:
+Requires Node.js 22.12+ and npm. Install Veil-QL from npm:
 
 ```sh
 npm install @hiddendevs/veil-ql
@@ -38,7 +38,13 @@ npm install @hiddendevs/veil-ql
 
 TypeScript declarations are included; no separate `@types` package is needed.
 The package supports `node` (legacy), `node16`/`nodenext`, and `bundler` TypeScript
-module resolution. Runtime output is ESM-only.
+module resolution. Both ESM `import` and CommonJS `require()` are supported.
+The runtime output is ESM; CommonJS uses Node.js 22.12+'s synchronous ESM
+loading, so both entry points share the same classes and module state.
+
+```js
+const { Schema, parse } = require("@hiddendevs/veil-ql");
+```
 
 ## Parse and validate a query
 
@@ -281,15 +287,15 @@ double-precision floating-point semantics.
 
 ## Development
 
-| Command                | Purpose                                                      |
-| ---------------------- | ------------------------------------------------------------ |
-| `npm run build`        | Emit JavaScript, declarations, and source maps into `dist/`. |
-| `npm run typecheck`    | Run strict TypeScript checking without emitting files.       |
-| `npm test`             | Run the test suite with Vitest.                              |
-| `npm run lint`         | Check source and tests with ESLint.                          |
-| `npm run lint:fix`     | Apply automatic ESLint fixes.                                |
-| `npm run format`       | Format the project with Prettier.                            |
-| `npm run format:check` | Check formatting without changing files.                     |
+| Command                | Purpose                                                         |
+| ---------------------- | --------------------------------------------------------------- |
+| `npm run build`        | Emit JavaScript, declarations, and source maps into `dist/`.    |
+| `npm run typecheck`    | Run strict TypeScript checking without emitting files.          |
+| `npm test`             | Build, then run Vitest, including native import/require checks. |
+| `npm run lint`         | Check source and tests with ESLint.                             |
+| `npm run lint:fix`     | Apply automatic ESLint fixes.                                   |
+| `npm run format`       | Format the project with Prettier.                               |
+| `npm run format:check` | Check formatting without changing files.                        |
 
 ## Project structure
 

@@ -30,14 +30,15 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
-            "import": "./dist/index.js"
+            "import": "./dist/index.js",
+            "require": "./dist/index.js"
         }
     },
     "scripts": {
         "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
         "prepublishOnly": "npm run build",
         "typecheck": "tsc -p tsconfig.json --noEmit",
-        "test": "vitest run",
+        "test": "npm run build && vitest run",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "format": "prettier --write .",
@@ -55,6 +56,6 @@
         "vitest": "^5.0.5"
     },
     "engines": {
-        "node": ">=22"
+        "node": ">=22.12.0"
     }
 }
