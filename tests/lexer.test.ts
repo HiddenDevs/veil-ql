@@ -46,6 +46,7 @@ test("lexes all symbols and scientific notation", () => {
         new Lexer("== != > >= < <= + - ( ) [ ] , .").tokenize().map((token) => token.kind),
         ["==", "!=", ">", ">=", "<", "<=", "+", "-", "(", ")", "[", "]", ",", ".", "eof"],
     );
+    assert.deepEqual(new Lexer("& | ").tokenize().map((token) => token.kind), ["&", "|", "eof"]);
     const tokens = new Lexer("1e3 2.5E-4 0 1e+2").tokenize();
     assert.deepEqual(
         tokens.flatMap((token) => (token.kind === "number" ? [token.value] : [])),

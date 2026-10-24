@@ -56,6 +56,15 @@ test("logical operators associate to the left", () => {
     if (expr.kind === "binary") assert.equal(expr.left.kind, "binary");
 });
 
+test("supports symbolic aliases for logical operators", () => {
+    const expr = parse("a & b | c");
+    assert.equal(expr.kind, "binary");
+    if (expr.kind !== "binary") return;
+    assert.equal(expr.op, "OR");
+    assert.equal(expr.left.kind, "binary");
+    if (expr.left.kind === "binary") assert.equal(expr.left.op, "AND");
+});
+
 test("parses optional single and multiple SORT BY fields", () => {
     const query = parseQuery('status == "paid" SORT BY customer.createdAt DESC, total');
     assert.equal(query.filter.kind, "binary");
