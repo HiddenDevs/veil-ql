@@ -118,13 +118,13 @@ export class Parser {
 
     private or(): Expr {
         let expr = this.and();
-        while (this.match("OR")) expr = this.binary(expr, "OR", this.and());
+        while (this.match("OR") ?? this.match("|")) expr = this.binary(expr, "OR", this.and());
         return expr;
     }
 
     private and(): Expr {
         let expr = this.not();
-        while (this.match("AND")) expr = this.binary(expr, "AND", this.not());
+        while (this.match("AND") ?? this.match("&")) expr = this.binary(expr, "AND", this.not());
         return expr;
     }
 

@@ -16,7 +16,7 @@ export const LANGUAGE_REFERENCE: LanguageReference = {
     rules: [
         "Reference fields by their exact, case-sensitive name such as user.age. Only the listed fields may be used.",
         "Literals: numbers (42, -1.5, 1e3), strings in single or double quotes (escapes: \\n \\r \\t \\\\ \\\" \\'), true, false, null, and lists such as [1, 2, 3].",
-        "Combine conditions with AND, OR, NOT and parentheses. Precedence from highest to lowest: unary minus, comparisons, NOT, AND, OR.",
+        "Combine conditions with AND (or &) and OR (or |), NOT and parentheses. Precedence from highest to lowest: unary minus, comparisons, NOT, AND, OR.",
         "Comparisons cannot be chained: write a > 1 AND a < 10, not 1 < a < 10.",
         "Both sides of a comparison must have compatible types. Strings are never coerced to numbers.",
         "A non-nullable boolean field can be used directly as a condition, e.g. user.active or NOT user.active.",

@@ -40,6 +40,11 @@ export class Lexer {
         const ch = this.peek();
         if (ch === "") return { kind: "eof", span: this.span(start) };
 
+        if (ch === "&" || ch === "|") {
+            this.advance();
+            return { kind: ch, span: this.span(start) };
+        }
+
         if (identifierStart(ch)) {
             this.advance();
             while (identifierPart(this.peek())) this.advance();

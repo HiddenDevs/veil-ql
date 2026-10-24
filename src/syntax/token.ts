@@ -11,7 +11,7 @@ export function joinSpans(left: Span, right: Span): Span {
     };
 }
 
-export const KEYWORDS = ["TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN", "SORT", "BY", "ASC", "DESC"] as const;
+export const KEYWORDS = ["TRUE", "FALSE", "NULL", "AND", "OR", "&", "|", "NOT", "IN", "SORT", "BY", "ASC", "DESC"] as const;
 export type Keyword = (typeof KEYWORDS)[number];
 export type Symbol = "==" | "!=" | ">" | ">=" | "<" | "<=" | "+" | "-" | "(" | ")" | "[" | "]" | "," | ".";
 
