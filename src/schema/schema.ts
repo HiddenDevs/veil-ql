@@ -51,7 +51,7 @@ export class Schema {
         return expr;
     }
 
-    /** Parse and validate a filter with an optional `SORT BY` clause. */
+    /** Parse and validate a filter, a `SORT BY` clause, or both. Omitted filters become `true`. */
     public parseQuery(source: string): Query {
         const query = parseQuery(source);
         this.validateQuery(query);

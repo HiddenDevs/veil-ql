@@ -93,6 +93,56 @@ test("parses queries without sorting and validates their filter", () => {
     assert.equal(query.sorts[0]?.direction, "DESC");
 });
 
+test("parses sort-only queries with a synthetic true filter and source spans", () => {
+    assert.deepEqual(parseQuery(" \n sort by total desc, customer.createdAt  "), {
+        filter: { kind: "literal", value: true, span: { start: 3, end: 3 } },
+        sorts: [
+            {
+                field: { kind: "path", parts: ["total"], span: { start: 11, end: 16 } },
+                direction: "DESC",
+                span: { start: 11, end: 21 },
+            },
+            {
+                field: { kind: "path", parts: ["customer", "createdAt"], span: { start: 23, end: 41 } },
+                direction: "ASC",
+                span: { start: 23, end: 41 },
+            },
+        ],
+        span: { start: 3, end: 41 },
+    });
+    assert.deepEqual(
+        parseQuery("SORT BY total ASC").sorts.map((sort) => sort.direction),
+        ["ASC"],
+    );
+});
+
+for (const source of [
+    "",
+    " \n ",
+    "SORT",
+    "SORT BY",
+    "SORT total",
+    "SORT BY total,",
+    "SORT BY total.",
+    "SORT BY total == 1",
+    "SORT BY total SORT BY total",
+    'status == "paid" SORT BY',
+    'status == "paid" SORT total',
+    'status == "paid" SORT BY total,',
+    'status == "paid" SORT BY total == 1',
+]) {
+    test(`parseQuery rejects ${JSON.stringify(source)}`, () => {
+        assert.throws(
+            () => parseQuery(source),
+            (error: unknown) => {
+                assert.ok(error instanceof ParseError);
+                assert.equal(error.detail.kind, source.trim() === "" ? "EmptyExpression" : "UnexpectedToken");
+                return true;
+            },
+        );
+    });
+}
+
 for (const op of ["==", "!=", ">", ">=", "<", "<=", "IN", "NOT IN"] satisfies ComparisonOp[]) {
     test(`parses comparison operator ${op}`, () => {
         const expr = parse(`a ${op} b`);

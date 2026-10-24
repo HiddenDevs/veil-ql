@@ -32,6 +32,7 @@ const config = {
     },
     examples: [
         { query: 'order.status == "paid" SORT BY order.total DESC', description: "Paid orders, largest first." },
+        { query: "SORT BY order.createdAt DESC", description: "All orders, newest first." },
     ],
 } satisfies SchemaConfig;
 

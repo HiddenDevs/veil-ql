@@ -11,8 +11,9 @@ export interface LanguageReference {
 
 /** Schema-independent description of the query language, written for an AI agent. */
 export const LANGUAGE_REFERENCE: LanguageReference = {
-    summary: "A query is a boolean filter expression over the listed fields, optionally followed by a SORT BY clause.",
-    grammar: "<filter> [SORT BY <field> [ASC|DESC] {, <field> [ASC|DESC]}]",
+    summary: "A query is a boolean filter expression, a SORT BY clause, or both. An omitted filter is treated as true.",
+    grammar:
+        "<filter> [SORT BY <field> [ASC|DESC] {, <field> [ASC|DESC]}] | SORT BY <field> [ASC|DESC] {, <field> [ASC|DESC]}",
     rules: [
         "Reference fields by their exact, case-sensitive name such as user.age. Only the listed fields may be used.",
         "Literals: numbers (42, -1.5, 1e3), strings in single or double quotes (escapes: \\n \\r \\t \\\\ \\\" \\'), true, false, null, and lists such as [1, 2, 3].",

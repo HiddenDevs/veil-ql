@@ -73,19 +73,27 @@ const ast = schema.parse('user.age >= 18 AND user.status == "active" AND contain
 const query = schema.parseQuery('user.status IN ["active", "pending"] SORT BY user.age DESC, user.createdAt');
 console.log(query.filter.kind, query.sorts);
 
+// Sorting only: the filter is a literal true expression.
+const sorted = schema.parseQuery("SORT BY user.createdAt DESC");
+
 // Parse syntax without a schema, then validate the AST separately.
 schema.validate(parse("user.age >= 18"));
 ```
 
-| API                         | Purpose                                                               |
-| --------------------------- | --------------------------------------------------------------------- |
-| `parse(source)`             | Parse a filter. Syntax only: fields and types are not checked.        |
-| `parseQuery(source)`        | Parse a filter with an optional `SORT BY` clause. Syntax only.        |
-| `schema.parse(source)`      | Parse and validate a filter as a non-nullable boolean expression.     |
-| `schema.parseQuery(source)` | Parse and validate a filter and check that sort fields are sortable.  |
-| `schema.validate(expr)`     | Validate an already-parsed filter.                                    |
-| `schema.validateQuery(q)`   | Validate an already-parsed query, including its sort fields.          |
-| `schema.describe()`         | Describe the language and schema as JSON for an AI agent (see below). |
+| API                         | Purpose                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `parse(source)`             | Parse a filter. Syntax only: fields and types are not checked.            |
+| `parseQuery(source)`        | Parse a filter, a `SORT BY` clause, or both. Syntax only.                 |
+| `schema.parse(source)`      | Parse and validate a filter as a non-nullable boolean expression.         |
+| `schema.parseQuery(source)` | Parse and validate a filter and/or sorting; sort fields must be sortable. |
+| `schema.validate(expr)`     | Validate an already-parsed filter.                                        |
+| `schema.validateQuery(q)`   | Validate an already-parsed query, including its sort fields.              |
+| `schema.describe()`         | Describe the language and schema as JSON for an AI agent (see below).     |
+
+Sort-only queries return a `literal` filter with `value: true`. Its synthetic
+span is zero-width at the start of `SORT`; the query span covers the full clause.
+Empty or whitespace-only queries remain invalid, and `parse()` still accepts
+filters only.
 
 ## Schema configuration
 

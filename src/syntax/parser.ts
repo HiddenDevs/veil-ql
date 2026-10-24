@@ -10,7 +10,7 @@ export function parse(source: string): Expr {
     return new Parser(new Lexer(source).tokenize()).parse();
 }
 
-/** Parse a filter followed by an optional `SORT BY` clause. Checks syntax only. */
+/** Parse a filter, a `SORT BY` clause, or both. Omitted filters become `true`. Checks syntax only. */
 export function parseQuery(source: string): Query {
     return new Parser(new Lexer(source).tokenize()).parseQuery();
 }
@@ -62,7 +62,9 @@ export class Parser {
     }
 
     public parseQuery(): Query {
-        const filter = this.filter();
+        const start = this.peek().span.start;
+        const filter: Expr =
+            this.peek().kind === "SORT" ? { kind: "literal", value: true, span: { start, end: start } } : this.filter();
         const sorts = this.sorts();
         this.expect("eof");
         const lastSort = sorts.at(-1);
